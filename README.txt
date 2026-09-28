@@ -1,4 +1,4 @@
-FF14 Photo Studio Filter v5
+FF14 Photo Studio Filter v6
 
-玉ボケを輪郭線なしの柔らかい発光に変更し、少数の六角ボケも面として馴染ませた版です。
+背景ふんわり・玉ボケ・ぼかしが背景にだけかかるよう修正した版です。
 index.html を HTTPS で公開して使用してください。
