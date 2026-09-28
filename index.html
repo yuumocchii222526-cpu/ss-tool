@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#17171b">
-<title>FF14 Photo Studio Auto Background Blur v5</title>
+<title>FF14 Photo Studio Auto Background Blur v6</title>
 <style>
 :root{--bg:#17171b;--panel:#1f2024;--panel2:#26272c;--accent:#c9a869;--text:#ebe6dc;--dim:#a39f95;--border:#34343b}
 *{box-sizing:border-box}
@@ -51,7 +51,7 @@ input[type=range]{flex:1;accent-color:var(--accent)}
 <div class="app">
 <header>
   <h1>FF14 Photo Studio</h1>
-  <p class="sub">自動背景ぼかし＋GShade風フィルタ。元ツールと同じ自動人物判定に加え、誤判定を直す補正ブラシを使えます。人物くっきりも調整できます。PNG保存時に (C) SQUARE ENIX を入れられます。</p>
+  <p class="sub">自動背景ぼかし＋GShade風フィルタ。元ツールと同じ自動人物判定に加え、誤判定を直す補正ブラシを使えます。人物くっきりも調整できます。v6では人物保護を強めて、体にぼかしが乗りにくいよう調整しています。PNG保存時に (C) SQUARE ENIX を入れられます。</p>
 </header>
 <div class="layout">
   <section>
@@ -87,10 +87,10 @@ input[type=range]{flex:1;accent-color:var(--accent)}
     <div class="group">
       <h2>GShade風フィルタ</h2>
       <div class="presets" id="presetWrap">
-        <button data-preset="sampleMatch" class="active">見本寄せ</button>
-        <button data-preset="flowerLight">花園</button>
-        <button data-preset="softBloom">ふんわり</button>
-        <button data-preset="paleDream">淡め</button>
+        <button data-preset="glow" class="active">Glow</button>
+        <button data-preset="bloom">Bloom</button>
+        <button data-preset="veil">Veil</button>
+        <button data-preset="dream">Dream</button>
       </div>
       <div class="row"><span>明るさ</span><input id="bright" type="range" min="70" max="145" value="118"><output id="brightOut">118</output></div>
       <div class="row"><span>彩度</span><input id="sat" type="range" min="40" max="180" value="86"><output id="satOut">86</output></div>
@@ -109,7 +109,7 @@ input[type=range]{flex:1;accent-color:var(--accent)}
   </aside>
 </div>
 <input type="file" id="fileInput" class="fileInput" accept="image/*,.heic,.heif,image/heic,image/heif">
-<p class="footer-note">※ 背景ぼかしは、提供されたYuzu Pic Studioコードと同じ「人物自動判定＋縮小拡大式ぼかし」の考え方を使っています。</p>
+<p class="footer-note">※ 背景ぼかしは、提供されたYuzu Pic Studioコードと同じ「人物自動判定＋縮小拡大式ぼかし」をベースに、v6では人物の縁を守る保護処理を追加しています。</p>
 </div>
 <script>
 (() => {
@@ -121,7 +121,7 @@ input[type=range]{flex:1;accent-color:var(--accent)}
   sliderIds.forEach(id=>{const el=$(id), out=$(id+'Out'); out.textContent=el.value; el.addEventListener('input',()=>out.textContent=el.value);});
 
   let fullImg=null, fullW=0, fullH=0, workW=0, workH=0, srcCanvas=null;
-  let showAfter=true, currentPreset='sampleMatch';
+  let showAfter=true, currentPreset='glow';
   let imageSegmenterInstance=null, autoBackgroundMask=null, segLoading=false, segError=null;
 
   // 補正ブラシ用。v4ではこの宣言が抜けていたため、
@@ -137,10 +137,10 @@ input[type=range]{flex:1;accent-color:var(--accent)}
   const WORK_MAX=1600;
 
   const PRESETS={
-    sampleMatch:{bright:118,sat:86,contrast:90,warmth:16,glow:24,subjectPop:16},
-    flowerLight:{bright:114,sat:98,contrast:95,warmth:14,glow:20,subjectPop:12},
-    softBloom:{bright:110,sat:92,contrast:91,warmth:10,glow:26,subjectPop:10},
-    paleDream:{bright:120,sat:74,contrast:85,warmth:11,glow:28,subjectPop:8}
+    glow:{bright:118,sat:86,contrast:90,warmth:16,glow:24,subjectPop:16},
+    bloom:{bright:114,sat:98,contrast:95,warmth:14,glow:20,subjectPop:12},
+    veil:{bright:110,sat:92,contrast:91,warmth:10,glow:26,subjectPop:10},
+    dream:{bright:120,sat:74,contrast:85,warmth:11,glow:28,subjectPop:8}
   };
 
   function offscreen(w,h){const c=document.createElement('canvas');c.width=w;c.height=h;return c;}
@@ -215,6 +215,62 @@ input[type=range]{flex:1;accent-color:var(--accent)}
     }finally{segLoading=false;updateSegUI();render();}
   }
 
+  function remapBackgroundMaskAlpha(maskCanvas,w,h,low=0.34,high=0.78){
+    const out=offscreen(w,h), octx=out.getContext('2d');
+    octx.drawImage(maskCanvas,0,0,w,h);
+    const img=octx.getImageData(0,0,w,h), d=img.data;
+    for(let i=0;i<d.length;i+=4){
+      const a=d[i+3]/255;
+      let na=smoothstep(low,high,a);
+      if(na<0.015) na=0;
+      d[i]=255; d[i+1]=255; d[i+2]=255; d[i+3]=Math.round(na*255);
+    }
+    octx.putImageData(img,0,0);
+    return out;
+  }
+
+  function softenMaskEdge(maskCanvas,w,h,blurPx){
+    if(blurPx<=0) return maskCanvas;
+    const out=offscreen(w,h), octx=out.getContext('2d');
+    octx.filter=`blur(${blurPx}px)`;
+    octx.drawImage(maskCanvas,0,0,w,h);
+    octx.filter='none';
+    return out;
+  }
+
+  function buildProtectedBackgroundMask(baseMask,w,h){
+    if(!baseMask) return null;
+
+    // 1) あいまいな背景判定を抑えて、人物側へぼかしが食い込みにくくする
+    let refined=remapBackgroundMaskAlpha(baseMask,w,h,0.34,0.78);
+
+    // 2) 人物マスクを少し膨らませて保護帯を作り、腕・服・耳の縁を守る
+    const subjectMask=subjectMaskFromBackgroundMask(refined,w,h);
+    const protectBlur=Math.max(2,Math.round(Math.max(w,h)/280));
+    const protect=offscreen(w,h), pctx=protect.getContext('2d');
+    pctx.filter=`blur(${protectBlur}px)`;
+    pctx.drawImage(subjectMask,0,0,w,h);
+    pctx.filter='none';
+    const protectImg=pctx.getImageData(0,0,w,h), pd=protectImg.data;
+    for(let i=0;i<pd.length;i+=4){
+      const a=pd[i+3]/255;
+      const na=smoothstep(0.06,0.42,a);
+      pd[i]=255; pd[i+1]=255; pd[i+2]=255; pd[i+3]=Math.round(na*255);
+    }
+    pctx.putImageData(protectImg,0,0);
+
+    const cut=offscreen(w,h), cctx=cut.getContext('2d');
+    cctx.drawImage(refined,0,0,w,h);
+    cctx.globalCompositeOperation='destination-out';
+    cctx.drawImage(protect,0,0,w,h);
+    cctx.globalCompositeOperation='source-over';
+
+    // 3) 最後に境目だけ少しなじませる
+    refined=softenMaskEdge(cut,w,h,1.2);
+    refined=remapBackgroundMaskAlpha(refined,w,h,0.03,0.97);
+    return refined;
+  }
+
   function buildEffectiveBackgroundMask(w,h){
     if(!autoBackgroundMask && !addBlurMask) return null;
     const out=offscreen(w,h), octx=out.getContext('2d');
@@ -225,7 +281,7 @@ input[type=range]{flex:1;accent-color:var(--accent)}
       octx.drawImage(restoreSharpMask,0,0,workW,workH,0,0,w,h);
       octx.globalCompositeOperation='source-over';
     }
-    return out;
+    return buildProtectedBackgroundMask(out,w,h);
   }
 
 
@@ -320,9 +376,9 @@ input[type=range]{flex:1;accent-color:var(--accent)}
     octx.filter=`brightness(${v.bright}) saturate(${v.sat}) contrast(${v.contrast})`;
     octx.drawImage(src,0,0,w,h);octx.filter='none';
     if(v.warmth!==0){const warm=Math.max(0,v.warmth),cool=Math.max(0,-v.warmth);if(warm){octx.globalCompositeOperation='soft-light';octx.fillStyle=`rgba(255,186,130,${warm/110})`;octx.fillRect(0,0,w,h);}if(cool){octx.globalCompositeOperation='soft-light';octx.fillStyle=`rgba(120,188,255,${cool/120})`;octx.fillRect(0,0,w,h);}octx.globalCompositeOperation='source-over';}
-    if(currentPreset==='flowerLight'){octx.globalCompositeOperation='soft-light';const g=octx.createLinearGradient(0,0,w,h);g.addColorStop(0,'rgba(255,214,214,.13)');g.addColorStop(1,'rgba(255,240,200,.12)');octx.fillStyle=g;octx.fillRect(0,0,w,h);octx.globalCompositeOperation='source-over';}
-    else if(currentPreset==='softBloom'){octx.globalCompositeOperation='screen';octx.fillStyle='rgba(255,245,240,.08)';octx.fillRect(0,0,w,h);octx.globalCompositeOperation='source-over';}
-    else if(currentPreset==='paleDream'||currentPreset==='sampleMatch'){octx.globalCompositeOperation='screen';octx.fillStyle='rgba(255,255,255,.10)';octx.fillRect(0,0,w,h);octx.globalCompositeOperation='source-over';}
+    if(currentPreset==='bloom'){octx.globalCompositeOperation='soft-light';const g=octx.createLinearGradient(0,0,w,h);g.addColorStop(0,'rgba(255,214,214,.13)');g.addColorStop(1,'rgba(255,240,200,.12)');octx.fillStyle=g;octx.fillRect(0,0,w,h);octx.globalCompositeOperation='source-over';}
+    else if(currentPreset==='veil'){octx.globalCompositeOperation='screen';octx.fillStyle='rgba(255,245,240,.08)';octx.fillRect(0,0,w,h);octx.globalCompositeOperation='source-over';}
+    else if(currentPreset==='dream'||currentPreset==='glow'){octx.globalCompositeOperation='screen';octx.fillStyle='rgba(255,255,255,.10)';octx.fillRect(0,0,w,h);octx.globalCompositeOperation='source-over';}
     if(v.glow>0){const glow=offscreen(w,h),gctx=glow.getContext('2d');gctx.filter=`blur(${Math.max(2,v.glow*.7)}px)`;gctx.drawImage(out,0,0);octx.globalCompositeOperation='screen';octx.globalAlpha=Math.min(.48,v.glow/90);octx.drawImage(glow,0,0);octx.globalAlpha=1;octx.globalCompositeOperation='source-over';}
     return out;
   }

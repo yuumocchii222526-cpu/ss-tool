@@ -1,4 +1,9 @@
-FF14 Photo Studio v5
+FF14 Photo Studio v8
 
-v4で抜けていた補正ブラシ用の変数宣言を修正し、画像が黒いままになる不具合を直した版です。
-人物自動判定・背景ぼかし・補正ブラシ・人物くっきり・PNG保存を含みます。
+フィルタ名:
+- Glow
+- Bloom
+- Veil
+- Dream
+
+GitHub Pagesで使う場合は、このZIP内の index.html を以前の index.html と置き換えてください。
