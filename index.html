@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#17171b">
-<title>FF14 Photo Studio Filter v4</title>
+<title>FF14 Photo Studio Filter v5</title>
 <style>
 :root{--bg:#17171b;--panel:#1f2024;--panel2:#26272c;--accent:#c9a869;--text:#ebe6dc;--dim:#a39f95;--border:#34343b}
 *{box-sizing:border-box}
@@ -47,7 +47,7 @@ input[type=range]{flex:1;accent-color:var(--accent)}
 <div class="app">
   <header>
     <h1>FF14 Photo Studio</h1>
-    <p class="sub">見本寄せ版。大きめの玉ボケ・六角ボケ・明るい花畑っぽい色味を強めています。人物・髪・服を塗ると、その部分だけくっきり残します。PNG保存時に (C) SQUARE ENIX を入れられます。</p>
+    <p class="sub">見本寄せ改良版。輪郭線のない柔らかい玉ボケと、自然な背景ぼかしに調整しています。人物・髪・服を塗ると、その部分だけくっきり残します。PNG保存時に (C) SQUARE ENIX を入れられます。</p>
   </header>
 
   <div class="layout">
@@ -80,8 +80,8 @@ input[type=range]{flex:1;accent-color:var(--accent)}
         </div>
         <div class="row"><span>ブラシ</span><input id="brush" type="range" min="12" max="140" value="44"><output id="brushOut">44</output></div>
         <div class="row"><span>背景ぼかし</span><input id="bgBlur" type="range" min="0" max="46" value="28"><output id="bgBlurOut">28</output></div>
-        <div class="row"><span>玉ボケ量</span><input id="bokeh" type="range" min="0" max="50" value="38"><output id="bokehOut">38</output></div>
-        <div class="row"><span>玉ボケ大きさ</span><input id="bokehSize" type="range" min="10" max="56" value="34"><output id="bokehSizeOut">34</output></div>
+        <div class="row"><span>玉ボケ量</span><input id="bokeh" type="range" min="0" max="50" value="28"><output id="bokehOut">28</output></div>
+        <div class="row"><span>玉ボケ大きさ</span><input id="bokehSize" type="range" min="12" max="68" value="42"><output id="bokehSizeOut">42</output></div>
         <div class="row"><span>背景ふんわり</span><input id="haze" type="range" min="0" max="40" value="18"><output id="hazeOut">18</output></div>
         <div class="row"><span>境界なじみ</span><input id="edgeSoft" type="range" min="0" max="18" value="7"><output id="edgeSoftOut">7</output></div>
         <div class="inline">
@@ -138,10 +138,10 @@ input[type=range]{flex:1;accent-color:var(--accent)}
   const WORK_MAX = 1400;
 
   const PRESETS = {
-    sampleMatch:{bright:118,sat:86,contrast:89,warmth:16,glow:34,clarity:48,bgBlur:30,bokeh:40,bokehSize:36,haze:22,edgeSoft:8},
-    flowerLight:{bright:114,sat:98,contrast:94,warmth:14,glow:26,clarity:42,bgBlur:26,bokeh:32,bokehSize:30,haze:16,edgeSoft:7},
-    softBloom: {bright:110,sat:92,contrast:91,warmth:10,glow:30,clarity:36,bgBlur:24,bokeh:28,bokehSize:26,haze:18,edgeSoft:7},
-    paleDream: {bright:120,sat:74,contrast:84,warmth:11,glow:34,clarity:30,bgBlur:28,bokeh:34,bokehSize:34,haze:24,edgeSoft:8}
+    sampleMatch:{bright:118,sat:86,contrast:89,warmth:16,glow:34,clarity:48,bgBlur:30,bokeh:28,bokehSize:42,haze:22,edgeSoft:8},
+    flowerLight:{bright:114,sat:98,contrast:94,warmth:14,glow:26,clarity:42,bgBlur:26,bokeh:24,bokehSize:38,haze:16,edgeSoft:7},
+    softBloom: {bright:110,sat:92,contrast:91,warmth:10,glow:30,clarity:36,bgBlur:24,bokeh:20,bokehSize:34,haze:18,edgeSoft:7},
+    paleDream: {bright:120,sat:74,contrast:84,warmth:11,glow:34,clarity:30,bgBlur:28,bokeh:24,bokehSize:40,haze:24,edgeSoft:8}
   };
 
   function setStatus(msg){ status.textContent = msg; }
@@ -287,16 +287,14 @@ input[type=range]{flex:1;accent-color:var(--accent)}
     const out = offscreen(w,h), octx = out.getContext('2d');
     if(v.bokeh <= 0) return out;
 
-    const sampleW = Math.max(72, Math.round(w/12)), sampleH = Math.max(72, Math.round(h/12));
+    const sampleW = Math.max(80, Math.round(w/10)), sampleH = Math.max(80, Math.round(h/10));
     const sample = offscreen(sampleW, sampleH), sctx = sample.getContext('2d');
     sctx.drawImage(source,0,0,sampleW,sampleH);
     const data = sctx.getImageData(0,0,sampleW,sampleH).data;
 
     const amount = clamp(v.bokeh / 50, 0, 1);
-    const count = Math.round(90 + amount * 170);
-    const largeCount = Math.round(16 + amount * 26);
-    const baseR = Math.max(10, v.bokehSize * 1.05);
-    octx.globalCompositeOperation='screen';
+    const count = Math.round(26 + amount * 54);
+    const baseR = Math.max(14, v.bokehSize * 1.25);
 
     function sampleColor(px, py){
       const sx = clamp(Math.floor(px / w * sampleW), 0, sampleW-1);
@@ -305,60 +303,56 @@ input[type=range]{flex:1;accent-color:var(--accent)}
       return [data[i], data[i+1], data[i+2], 0.2126*data[i] + 0.7152*data[i+1] + 0.0722*data[i+2]];
     }
 
-    function drawBokehShape(x, y, radius, alpha, rgb, shape){
-      const [r,g,b] = rgb;
-      const grad = octx.createRadialGradient(x,y,0,x,y,radius);
-      grad.addColorStop(0, `rgba(255,255,255,${alpha})`);
-      grad.addColorStop(0.22, `rgba(${Math.min(255,r+25)},${Math.min(255,g+25)},${Math.min(255,b+25)},${alpha*0.88})`);
-      grad.addColorStop(0.7, `rgba(${r},${g},${b},${alpha*0.28})`);
-      grad.addColorStop(1, 'rgba(255,255,255,0)');
-      octx.fillStyle = grad;
-      if(shape === 'hex'){
-        drawHexPath(octx, x, y, radius);
-        octx.fill();
-        octx.strokeStyle = `rgba(255,255,255,${alpha*0.52})`;
-        octx.lineWidth = Math.max(1.5, radius*0.08);
-        drawHexPath(octx, x, y, radius*0.72);
-        octx.stroke();
-      } else {
-        octx.beginPath();
-        octx.arc(x,y,radius,0,Math.PI*2);
-        octx.fill();
-        octx.strokeStyle = `rgba(255,255,255,${alpha*0.48})`;
-        octx.lineWidth = Math.max(1.2, radius*0.08);
-        octx.beginPath();
-        octx.arc(x,y,radius*0.7,0,Math.PI*2);
-        octx.stroke();
-      }
-    }
+    // まず柔らかい発光レイヤーを作る
+    const glowLayer = offscreen(w,h), gctx = glowLayer.getContext('2d');
+    gctx.globalCompositeOperation = 'screen';
 
     for(let i=0; i<count; i++){
-      const rx = rand(i*13.4+4.7, i*9.2+11.4) * w;
-      const ry = rand(i*8.1+91.7, i*4.3+10.2) * h;
-      const [r,g,b,lum] = sampleColor(rx, ry);
-      const topBoost = 1 - (ry / h) * 0.45;
-      const appear = 0.32 + amount*0.55 + Math.max(0, lum-95)/230 + topBoost*0.12;
-      if(rand(rx*0.31+i, ry*0.27+2) > appear) continue;
-      const radius = baseR * (0.5 + rand(i, rx)*0.7) * (0.8 + lum/255*0.55);
-      const alpha = clamp((0.14 + amount*0.28 + Math.max(0, lum-95)/360) * (0.9 + topBoost*0.25), 0.08, 0.52);
-      drawBokehShape(rx, ry, radius, alpha, [r,g,b], rand(i*5.2, ry) > 0.48 ? 'hex' : 'circle');
+      const rx = rand(i*11.7+23.4, i*7.9+88.1) * w;
+      const ry = rand(i*5.3+61.2, i*3.7+19.5) * h * 0.92;
+      const [r,g,b,lum] = sampleColor(rx,ry);
+      const upperBoost = 1 - (ry/h)*0.35;
+      const brightnessGate = 0.24 + amount*0.38 + Math.max(0,lum-105)/240 + upperBoost*0.08;
+      if(rand(rx*0.17+i, ry*0.23+5) > brightnessGate) continue;
+
+      const radius = baseR * (0.75 + rand(i,rx)*0.95) * (0.9 + lum/255*0.35);
+      const alpha = clamp(0.05 + amount*0.13 + Math.max(0,lum-125)/650, 0.04, 0.22);
+
+      // 中央が明るく、外周が完全に消える柔らかい円
+      const grad = gctx.createRadialGradient(rx,ry,0,rx,ry,radius);
+      grad.addColorStop(0, `rgba(255,255,255,${alpha*1.25})`);
+      grad.addColorStop(0.28, `rgba(${Math.min(255,r+35)},${Math.min(255,g+35)},${Math.min(255,b+35)},${alpha})`);
+      grad.addColorStop(0.68, `rgba(${r},${g},${b},${alpha*0.35})`);
+      grad.addColorStop(1, 'rgba(255,255,255,0)');
+      gctx.fillStyle = grad;
+      gctx.beginPath();
+      gctx.arc(rx,ry,radius,0,Math.PI*2);
+      gctx.fill();
     }
 
-    // 大きめの印象的な玉ボケを追加
-    for(let i=0; i<largeCount; i++){
-      const rx = rand(i*7.8+33.1, i*5.7+98.4) * w;
-      const ry = rand(i*6.1+21.5, i*3.4+77.7) * h * 0.88;
-      const [r,g,b,lum] = sampleColor(rx, ry);
-      const radius = baseR * (1.25 + rand(rx,i)*0.95);
-      const alpha = clamp(0.16 + amount*0.22 + Math.max(0, lum-110)/420, 0.10, 0.40);
-      drawBokehShape(rx, ry, radius, alpha, [r,g,b], rand(i*2.1, rx) > 0.35 ? 'hex' : 'circle');
+    // 少数だけ、六角形の「面」をぼかして重ねる（輪郭線なし）
+    const hexCount = Math.round(4 + amount*10);
+    for(let i=0;i<hexCount;i++){
+      const rx = rand(i*17.2+7.7, i*6.4+31.9) * w;
+      const ry = rand(i*8.9+12.3, i*4.2+57.6) * h * 0.78;
+      const [r,g,b,lum] = sampleColor(rx,ry);
+      if(lum < 135 && rand(i,lum) > 0.25) continue;
+      const radius = baseR * (1.05 + rand(rx,i)*0.75);
+      const alpha = clamp(0.045 + amount*0.10 + Math.max(0,lum-140)/900, 0.035, 0.15);
+      gctx.save();
+      gctx.shadowColor = `rgba(255,255,255,${alpha*0.8})`;
+      gctx.shadowBlur = radius*0.45;
+      gctx.fillStyle = `rgba(${Math.min(255,r+25)},${Math.min(255,g+25)},${Math.min(255,b+25)},${alpha})`;
+      drawHexPath(gctx, rx, ry, radius);
+      gctx.fill();
+      gctx.restore();
     }
 
-    const softened = offscreen(w,h), s2=softened.getContext('2d');
-    s2.filter = `blur(${Math.max(1.4, v.bokehSize*0.13)}px)`;
-    s2.drawImage(out,0,0);
-    s2.filter = 'none';
-    return softened;
+    // 全体をさらにぼかして「図形」感を消す
+    octx.filter = `blur(${Math.max(3, v.bokehSize*0.18)}px)`;
+    octx.drawImage(glowLayer,0,0);
+    octx.filter='none';
+    return out;
   }
 
   function softMask(mask, w, h, edge){

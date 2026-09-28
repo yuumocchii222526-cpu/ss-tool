@@ -1,4 +1,4 @@
-FF14 Photo Studio Filter v4
+FF14 Photo Studio Filter v5
 
-見本寄せを強めた版です。大きめの玉ボケ・六角ボケ・背景のふんわり感を強化しています。
+玉ボケを輪郭線なしの柔らかい発光に変更し、少数の六角ボケも面として馴染ませた版です。
 index.html を HTTPS で公開して使用してください。
