@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#17171b">
-<title>FF14 Photo Studio Auto Background Blur v2</title>
+<title>FF14 Photo Studio Auto Background Blur v5</title>
 <style>
 :root{--bg:#17171b;--panel:#1f2024;--panel2:#26272c;--accent:#c9a869;--text:#ebe6dc;--dim:#a39f95;--border:#34343b}
 *{box-sizing:border-box}
@@ -123,6 +123,17 @@ input[type=range]{flex:1;accent-color:var(--accent)}
   let fullImg=null, fullW=0, fullH=0, workW=0, workH=0, srcCanvas=null;
   let showAfter=true, currentPreset='sampleMatch';
   let imageSegmenterInstance=null, autoBackgroundMask=null, segLoading=false, segError=null;
+
+  // 補正ブラシ用。v4ではこの宣言が抜けていたため、
+  // 画像読み込み後の描画がReferenceErrorで停止していました。
+  const maskPaintCanvas=$('maskPaintCanvas');
+  const maskPaintCtx=maskPaintCanvas.getContext('2d');
+  let addBlurMask=null;
+  let restoreSharpMask=null;
+  let correctionMode='restore';
+  let painting=false;
+  let lastPaint=null;
+
   const WORK_MAX=1600;
 
   const PRESETS={
@@ -205,6 +216,7 @@ input[type=range]{flex:1;accent-color:var(--accent)}
   }
 
   function buildEffectiveBackgroundMask(w,h){
+    if(!autoBackgroundMask && !addBlurMask) return null;
     const out=offscreen(w,h), octx=out.getContext('2d');
     if(autoBackgroundMask) octx.drawImage(autoBackgroundMask,0,0,workW,workH,0,0,w,h);
     if(addBlurMask) octx.drawImage(addBlurMask,0,0,workW,workH,0,0,w,h);
@@ -358,8 +370,19 @@ input[type=range]{flex:1;accent-color:var(--accent)}
     try{
       const decoded=await decodeFile(file);fullImg=decoded;fullW=decoded.width||decoded.naturalWidth;fullH=decoded.height||decoded.naturalHeight;if(!fullW||!fullH)throw new Error('画像サイズを取得できませんでした');
       const scale=Math.min(1,WORK_MAX/Math.max(fullW,fullH));workW=Math.max(1,Math.round(fullW*scale));workH=Math.max(1,Math.round(fullH*scale));
-      srcCanvas=offscreen(workW,workH);srcCanvas.getContext('2d').drawImage(fullImg,0,0,workW,workH);canvas.width=workW;canvas.height=workH;maskPaintCanvas.width=workW;maskPaintCanvas.height=workH;
-      pickerCard.style.display='none';canvasWrap.style.display='block';panel.style.display='block';autoBackgroundMask=null;segError=null;updateSegUI();applyPreset(currentPreset);computeAutoBackgroundMask();
+      srcCanvas=offscreen(workW,workH);
+      srcCanvas.getContext('2d').drawImage(fullImg,0,0,workW,workH);
+      canvas.width=workW;canvas.height=workH;
+      maskPaintCanvas.width=workW;maskPaintCanvas.height=workH;
+      maskPaintCtx.clearRect(0,0,workW,workH);
+      addBlurMask=null;
+      restoreSharpMask=null;
+      painting=false;
+      lastPaint=null;
+      pickerCard.style.display='none';canvasWrap.style.display='block';panel.style.display='block';
+      autoBackgroundMask=null;segError=null;updateSegUI();
+      applyPreset(currentPreset);
+      computeAutoBackgroundMask();
     }catch(err){setStatus('読み込み失敗\n'+(err&&err.message?err.message:String(err))+'\n\nHEICの場合はJPEG/PNGで試してください。');}
   });
 
@@ -401,6 +424,12 @@ input[type=range]{flex:1;accent-color:var(--accent)}
     if($('copyrightOn').checked){const pad=Math.max(18,Math.round(fullW*.014)),fontSize=Math.max(16,Math.round(fullW*.018));octx.save();octx.font=`600 ${fontSize}px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif`;const text='(C) SQUARE ENIX',tw=octx.measureText(text).width,bw=tw+fontSize*1.15,bh=fontSize*1.9,x=fullW-pad,y=fullH-pad;octx.fillStyle='rgba(0,0,0,.34)';roundRect(octx,x-bw,y-bh,bw,bh,fontSize*.52);octx.fill();octx.textAlign='right';octx.textBaseline='bottom';octx.fillStyle='rgba(255,255,255,.97)';octx.fillText(text,x-fontSize*.46,y-fontSize*.36);octx.restore();}
     return new Promise(resolve=>out.toBlob(resolve,'image/png'));
   }
+
+
+  window.addEventListener('error',e=>{
+    console.error(e.error||e.message);
+    if(!fullImg) setStatus('JavaScriptエラー: '+(e.message||'不明なエラー'));
+  });
 
   $('btnSave').addEventListener('click',async()=>{if(!fullImg)return;$('btnSave').disabled=true;const prev=$('btnSave').textContent;$('btnSave').textContent='書き出し中…';try{if($('blurOn').checked&&!autoBackgroundMask&&!segLoading)await computeAutoBackgroundMask();const blob=await exportPNG();const a=document.createElement('a'),url=URL.createObjectURL(blob);a.href=url;a.download='ff14_photo_studio.png';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1200);}finally{$('btnSave').disabled=false;$('btnSave').textContent=prev;}});
 })();
