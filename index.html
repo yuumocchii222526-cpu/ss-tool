@@ -113,7 +113,7 @@ select{width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--bo
   </aside>
 </div>
 <input type="file" id="fileInput" class="fileInput" accept="image/*,.heic,.heif,image/heic,image/heif">
-<p class="footer-note">※ 人物判定は自動処理のため、髪・耳・装飾などで判定がずれる場合があります。その場合は補正ブラシで調整してください。</p>
+<p class="footer-note">※ 人物判定は自動処理のため、髪・耳・手先・装飾などで境界が前後する場合があります。その場合は補正ブラシで微調整してください。</p>
 <div class="privacy-note"><strong>プライバシーについて</strong><br>このツールは、加工に使用する画像をサーバーへアップロードせず、お使いのPC・スマホのブラウザ内で処理する設計です。画像データが端末の外へ送信・保存されることはありません。人物判定用モデルの初回読み込み時のみインターネット接続が必要ですが、写真そのものは送信されません。プライバシーに配慮して安心してお使いいただけます。</div>
 </div>
 <script>
@@ -248,23 +248,38 @@ select{width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--bo
     return out;
   }
 
+  function expandAlphaMask(maskCanvas,w,h,radiusPx){
+    const r=Math.max(0,Math.round(radiusPx));
+    if(r<=0) return maskCanvas;
+    const out=offscreen(w,h), octx=out.getContext('2d');
+    for(let oy=-r;oy<=r;oy++){
+      for(let ox=-r;ox<=r;ox++){
+        if((ox*ox)+(oy*oy)>(r*r)) continue;
+        octx.drawImage(maskCanvas,ox,oy,w,h);
+      }
+    }
+    return out;
+  }
+
   function buildProtectedBackgroundMask(baseMask,w,h){
     if(!baseMask) return null;
 
-    // 1) あいまいな背景判定を抑えて、人物側へぼかしが食い込みにくくする
-    let refined=remapBackgroundMaskAlpha(baseMask,w,h,0.34,0.78);
+    // 1) 背景ぼかし量は保ちつつ、人物境界だけ不自然になりにくいよう少しだけ圧縮
+    let refined=remapBackgroundMaskAlpha(baseMask,w,h,0.34,0.80);
 
-    // 2) 人物マスクを少し膨らませて保護帯を作り、腕・服・耳の縁を守る
+    // 2) 人物の縁に「やわらかい保護帯」を作って、手や腕を守りながら境界はなだらかにする
     const subjectMask=subjectMaskFromBackgroundMask(refined,w,h);
-    const protectBlur=Math.max(2,Math.round(Math.max(w,h)/280));
+    const protectGrow=Math.max(1,Math.round(Math.max(w,h)/420));
+    const expandedSubject=expandAlphaMask(subjectMask,w,h,protectGrow);
+    const protectBlur=Math.max(4,Math.round(Math.max(w,h)/170));
     const protect=offscreen(w,h), pctx=protect.getContext('2d');
     pctx.filter=`blur(${protectBlur}px)`;
-    pctx.drawImage(subjectMask,0,0,w,h);
+    pctx.drawImage(expandedSubject,0,0,w,h);
     pctx.filter='none';
     const protectImg=pctx.getImageData(0,0,w,h), pd=protectImg.data;
     for(let i=0;i<pd.length;i+=4){
       const a=pd[i+3]/255;
-      const na=smoothstep(0.06,0.42,a);
+      const na=smoothstep(0.10,0.52,a);
       pd[i]=255; pd[i+1]=255; pd[i+2]=255; pd[i+3]=Math.round(na*255);
     }
     pctx.putImageData(protectImg,0,0);
@@ -275,9 +290,9 @@ select{width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--bo
     cctx.drawImage(protect,0,0,w,h);
     cctx.globalCompositeOperation='source-over';
 
-    // 3) 最後に境目だけ少しなじませる
-    refined=softenMaskEdge(cut,w,h,1.2);
-    refined=remapBackgroundMaskAlpha(refined,w,h,0.03,0.97);
+    // 3) 境目を少し広めにフェザーして、背景のぼけ感は残したまま切り抜き感を減らす
+    refined=softenMaskEdge(cut,w,h,2.4);
+    refined=remapBackgroundMaskAlpha(refined,w,h,0.06,0.98);
     return refined;
   }
 
