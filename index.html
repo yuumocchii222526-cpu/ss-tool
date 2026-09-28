@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#17171b">
+<title>FF14 Photo Studio</title>
+<style>
+:root{--bg:#17171b;--panel:#1f2024;--panel2:#26272c;--accent:#c9a869;--text:#eae6da;--dim:#9a978d;--border:#34343b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif}
+header{padding:18px 18px 8px}
+h1{margin:0;color:var(--accent);font-family:Georgia,serif;font-size:23px}
+.sub{margin:5px 0 0;color:var(--dim);font-size:13px}
+.app{max-width:1100px;margin:auto}
+.stage{padding:16px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px}
+#previewWrap{display:none}
+canvas{width:100%;height:auto;display:block;border-radius:10px;background:#111;touch-action:none}
+input[type=file]{display:none}
+.btn{display:inline-block;width:100%;border:0;border-radius:10px;padding:13px 16px;font-weight:700;font-size:15px;background:var(--accent);color:#171717;text-align:center}
+.ghost{margin-top:9px;background:var(--panel2);color:var(--text);border:1px solid var(--border)}
+.status{margin-top:12px;color:var(--dim);font-size:13px;white-space:pre-wrap}
+.controls{display:none;padding:0 16px 28px}
+.group{margin-top:16px;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px}
+.row{display:flex;align-items:center;gap:10px;margin:10px 0;font-size:13px}
+.row span{width:95px}
+input[type=range]{flex:1;accent-color:var(--accent)}
+.toggle{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.toggle button{padding:10px;border-radius:9px;border:1px solid var(--border);background:var(--panel2);color:var(--text)}
+.toggle button.active{background:var(--accent);color:#171717;border-color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+<h1>FF14 Photo Studio</h1>
+<p class="sub">端末内で画像を加工します</p>
+</header>
+
+<section class="stage">
+<div class="card" id="pickerCard">
+<label class="btn" for="fileInput">写真を選ぶ</label>
+<input id="fileInput" type="file" accept="image/*,.heic,.heif">
+<div id="status" class="status">写真を選ぶと、ここに読み込み状況が表示されます。</div>
+</div>
+
+<div id="previewWrap" class="card">
+<canvas id="canvas"></canvas>
+<button class="btn ghost" id="chooseAgain">別の写真を選ぶ</button>
+</div>
+</section>
+
+<section class="controls" id="controls">
+<div class="group">
+<div class="toggle">
+<button id="beforeBtn">加工前</button>
+<button id="afterBtn" class="active">加工後</button>
+</div>
+<div class="row"><span>明るさ</span><input id="bright" type="range" min="70" max="130" value="100"></div>
+<div class="row"><span>彩度</span><input id="sat" type="range" min="40" max="180" value="105"></div>
+<div class="row"><span>コントラスト</span><input id="contrast" type="range" min="70" max="140" value="103"></div>
+<div class="row"><span>背景ぼかし</span><input id="blur" type="range" min="0" max="24" value="0"></div>
+</div>
+<div class="group">
+<button class="btn" id="saveBtn">PNGで保存</button>
+</div>
+</section>
+</div>
+
+<script>
+(() => {
+  const input = document.getElementById('fileInput');
+  const status = document.getElementById('status');
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const previewWrap = document.getElementById('previewWrap');
+  const controls = document.getElementById('controls');
+  const pickerCard = document.getElementById('pickerCard');
+  const chooseAgain = document.getElementById('chooseAgain');
+  const beforeBtn = document.getElementById('beforeBtn');
+  const afterBtn = document.getElementById('afterBtn');
+  const bright = document.getElementById('bright');
+  const sat = document.getElementById('sat');
+  const contrast = document.getElementById('contrast');
+  const blur = document.getElementById('blur');
+
+  let source = null;
+  let originalW = 0, originalH = 0;
+  let showAfter = true;
+  const MAX = 1600;
+
+  function setStatus(msg){ status.textContent = msg; }
+
+  async function decodeFile(file){
+    if ('createImageBitmap' in window) {
+      try {
+        return await createImageBitmap(file);
+      } catch(e) {}
+    }
+    return await new Promise((resolve,reject)=>{
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('FileReaderで読み込めませんでした'));
+      reader.onload = () => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error('画像デコードに失敗しました'));
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function render(){
+    if(!source) return;
+    const scale = Math.min(1, MAX / Math.max(originalW, originalH));
+    const w = Math.max(1, Math.round(originalW * scale));
+    const h = Math.max(1, Math.round(originalH * scale));
+    if(canvas.width !== w || canvas.height !== h){
+      canvas.width = w; canvas.height = h;
+    }
+    ctx.save();
+    ctx.clearRect(0,0,w,h);
+    if(showAfter){
+      const b = (+bright.value)/100;
+      const s = (+sat.value)/100;
+      const c = (+contrast.value)/100;
+      const bl = +blur.value;
+      ctx.filter = `brightness(${b}) saturate(${s}) contrast(${c}) blur(${bl}px)`;
+    } else {
+      ctx.filter = 'none';
+    }
+    ctx.drawImage(source,0,0,w,h);
+    ctx.restore();
+  }
+
+  input.addEventListener('change', async () => {
+    const file = input.files && input.files[0];
+    if(!file) return;
+    setStatus(`読み込み中…\n${file.name}\n${file.type || 'MIME不明'} / ${Math.round(file.size/1024)} KB`);
+    try{
+      const decoded = await decodeFile(file);
+      source = decoded;
+      originalW = decoded.width || decoded.naturalWidth;
+      originalH = decoded.height || decoded.naturalHeight;
+      if(!originalW || !originalH) throw new Error('画像サイズを取得できませんでした');
+      pickerCard.style.display='none';
+      previewWrap.style.display='block';
+      controls.style.display='block';
+      render();
+    }catch(err){
+      setStatus('読み込み失敗\n' + (err && err.message ? err.message : String(err)) + '\n\nHEICの場合は「写真」アプリでスクリーンショットとして保存するか、JPEG/PNGにして試してください。');
+    }
+  });
+
+  chooseAgain.addEventListener('click', () => {
+    input.value = '';
+    input.click();
+  });
+
+  [bright,sat,contrast,blur].forEach(el=>el.addEventListener('input',render));
+
+  beforeBtn.addEventListener('click',()=>{
+    showAfter=false;
+    beforeBtn.classList.add('active');
+    afterBtn.classList.remove('active');
+    render();
+  });
+  afterBtn.addEventListener('click',()=>{
+    showAfter=true;
+    afterBtn.classList.add('active');
+    beforeBtn.classList.remove('active');
+    render();
+  });
+
+  document.getElementById('saveBtn').addEventListener('click',()=>{
+    canvas.toBlob(blob=>{
+      if(!blob) return;
+      const a=document.createElement('a');
+      const url=URL.createObjectURL(blob);
+      a.href=url;
+      a.download='ff14_edit.png';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),1000);
+    },'image/png');
+  });
+
+  window.addEventListener('error', e => setStatus('JavaScriptエラー: ' + (e.message || '不明なエラー')));
+})();
+</script>
+</body>
+</html>
