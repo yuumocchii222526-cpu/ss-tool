@@ -45,13 +45,15 @@ input[type=range]{flex:1;accent-color:var(--accent)}
 .dot{width:7px;height:7px;border-radius:50%;background:#8f8}
 .dot.loading{background:#e9c16f}.dot.error{background:#e78989}
 .footer-note{padding:0 16px;margin-top:10px;color:var(--dim);font-size:12px;line-height:1.6}
+.privacy-note{margin:14px 16px 0;padding:14px 16px;border:1px solid var(--border);border-radius:12px;background:var(--panel);color:var(--dim);font-size:12px;line-height:1.75}
+.privacy-note strong{color:var(--text)}
 </style>
 </head>
 <body>
 <div class="app">
 <header>
   <h1>FF14 Photo Studio</h1>
-  <p class="sub">自動背景ぼかし＋GShade風フィルタ。元ツールと同じ自動人物判定に加え、誤判定を直す補正ブラシを使えます。人物くっきりも調整できます。v6では人物保護を強めて、体にぼかしが乗りにくいよう調整しています。PNG保存時に (C) SQUARE ENIX を入れられます。</p>
+  <p class="sub">FF14のスクリーンショットを、背景ぼかしとフィルタで美しく仕上げるフォトツールです。人物を自動判定し、色味・ぼかし・くっきり感を自由に調整できます。必要な部分は補正ブラシで細かく整えられます。</p>
 </header>
 <div class="layout">
   <section>
@@ -80,7 +82,7 @@ input[type=range]{flex:1;accent-color:var(--accent)}
       </div>
       <div class="row"><span>ブラシ太さ</span><input id="brushSize" type="range" min="10" max="120" value="42"><output id="brushSizeOut">42</output></div>
       <button class="btn secondary" type="button" id="clearCorrection" style="margin-top:8px;">補正をリセット</button>
-      <p class="mini" style="margin-top:10px;">自動判定で腕・耳・装飾などがぼけた時は「鮮明に戻す」でその部分をなぞってください。元のYuzu Pic Studioと同じ補正方式です。</p>
+      <p class="mini" style="margin-top:10px;">自動判定で腕・耳・髪・装飾などがぼけた時は「鮮明に戻す」でその部分をなぞってください。背景側を追加でぼかしたい時は「ぼかしを足す」を使えます。</p>
       <div class="badge"><span class="dot loading" id="segDot"></span><span id="segStatus">人物判定の準備中</span></div>
     </div>
 
@@ -109,7 +111,8 @@ input[type=range]{flex:1;accent-color:var(--accent)}
   </aside>
 </div>
 <input type="file" id="fileInput" class="fileInput" accept="image/*,.heic,.heif,image/heic,image/heif">
-<p class="footer-note">※ 背景ぼかしは、提供されたYuzu Pic Studioコードと同じ「人物自動判定＋縮小拡大式ぼかし」をベースに、v6では人物の縁を守る保護処理を追加しています。</p>
+<p class="footer-note">※ 人物判定は自動処理のため、髪・耳・装飾などで判定がずれる場合があります。その場合は補正ブラシで調整してください。</p>
+<div class="privacy-note"><strong>プライバシーについて</strong><br>このツールは、加工に使用する画像をサーバーへアップロードせず、お使いのPC・スマホのブラウザ内で処理する設計です。画像データが端末の外へ送信・保存されることはありません。人物判定用モデルの初回読み込み時のみインターネット接続が必要ですが、写真そのものは送信されません。プライバシーに配慮して安心してお使いいただけます。</div>
 </div>
 <script>
 (() => {
@@ -187,7 +190,7 @@ input[type=range]{flex:1;accent-color:var(--accent)}
       const floats=confidenceMask.getAsFloat32Array();
       const mw=confidenceMask.width, mh=confidenceMask.height;
 
-      // Yuzu Pic Studioと同じ考え方：人物信頼度をそのまま反転して背景マスクにする
+      // と同じ考え方：人物信頼度をそのまま反転して背景マスクにする
       const raw=offscreen(mw,mh), rctx=raw.getContext('2d');
       const imgData=rctx.createImageData(mw,mh);
       for(let i=0;i<floats.length;i++){
@@ -286,7 +289,7 @@ input[type=range]{flex:1;accent-color:var(--accent)}
   }
 
 
-  // Yuzu Pic Studioと同じ考え方: 一度小さく縮めてから拡大して滑らかなぼかしを作る
+  // と同じ考え方: 一度小さく縮めてから拡大して滑らかなぼかしを作る
   function buildScaleBlur(source,w,h,radiusPx){
     if(radiusPx<=0){const c=offscreen(w,h);c.getContext('2d').drawImage(source,0,0,w,h);return c;}
     const targetScale=Math.min(1,1/(radiusPx*.55));
