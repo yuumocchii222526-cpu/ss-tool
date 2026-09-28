@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#17171b">
-<title>FF14 Photo Studio Filter v2</title>
+<title>FF14 Photo Studio Filter v4</title>
 <style>
 :root{--bg:#17171b;--panel:#1f2024;--panel2:#26272c;--accent:#c9a869;--text:#ebe6dc;--dim:#a39f95;--border:#34343b}
 *{box-sizing:border-box}
@@ -47,7 +47,7 @@ input[type=range]{flex:1;accent-color:var(--accent)}
 <div class="app">
   <header>
     <h1>FF14 Photo Studio</h1>
-    <p class="sub">背景ぼかし＋玉ボケ＋GShade風フィルタ版。人物・髪・服を指で塗ると、その部分だけくっきり残します。PNG保存時に (C) SQUARE ENIX を入れられます。</p>
+    <p class="sub">見本寄せ版。大きめの玉ボケ・六角ボケ・明るい花畑っぽい色味を強めています。人物・髪・服を塗ると、その部分だけくっきり残します。PNG保存時に (C) SQUARE ENIX を入れられます。</p>
   </header>
 
   <div class="layout">
@@ -79,9 +79,10 @@ input[type=range]{flex:1;accent-color:var(--accent)}
           <button id="btnErase">消す</button>
         </div>
         <div class="row"><span>ブラシ</span><input id="brush" type="range" min="12" max="140" value="44"><output id="brushOut">44</output></div>
-        <div class="row"><span>背景ぼかし</span><input id="bgBlur" type="range" min="0" max="36" value="20"><output id="bgBlurOut">20</output></div>
-        <div class="row"><span>玉ボケ量</span><input id="bokeh" type="range" min="0" max="40" value="24"><output id="bokehOut">24</output></div>
-        <div class="row"><span>玉ボケ大きさ</span><input id="bokehSize" type="range" min="10" max="40" value="24"><output id="bokehSizeOut">24</output></div>
+        <div class="row"><span>背景ぼかし</span><input id="bgBlur" type="range" min="0" max="46" value="28"><output id="bgBlurOut">28</output></div>
+        <div class="row"><span>玉ボケ量</span><input id="bokeh" type="range" min="0" max="50" value="38"><output id="bokehOut">38</output></div>
+        <div class="row"><span>玉ボケ大きさ</span><input id="bokehSize" type="range" min="10" max="56" value="34"><output id="bokehSizeOut">34</output></div>
+        <div class="row"><span>背景ふんわり</span><input id="haze" type="range" min="0" max="40" value="18"><output id="hazeOut">18</output></div>
         <div class="row"><span>境界なじみ</span><input id="edgeSoft" type="range" min="0" max="18" value="7"><output id="edgeSoftOut">7</output></div>
         <div class="inline">
           <button class="small-btn" id="btnFillMask">中央を保護</button>
@@ -92,9 +93,9 @@ input[type=range]{flex:1;accent-color:var(--accent)}
       <div class="group">
         <h2>GShade風フィルタ</h2>
         <div class="presets" id="presetWrap">
-          <button data-preset="flowerLight" class="active">花園</button>
+          <button data-preset="sampleMatch" class="active">見本寄せ</button>
+          <button data-preset="flowerLight">花園</button>
           <button data-preset="softBloom">ふんわり</button>
-          <button data-preset="clearCute">クリア</button>
           <button data-preset="paleDream">淡め</button>
         </div>
         <div class="row"><span>明るさ</span><input id="bright" type="range" min="70" max="145" value="112"><output id="brightOut">112</output></div>
@@ -125,7 +126,7 @@ input[type=range]{flex:1;accent-color:var(--accent)}
   const panel = $('panel'), canvasWrap = $('canvasWrap'), canvas = $('canvas'), ctx = canvas.getContext('2d');
   const maskHint = $('maskHint');
 
-  const sliderIds = ['brush','bgBlur','bokeh','bokehSize','edgeSoft','bright','sat','contrast','warmth','glow','clarity'];
+  const sliderIds = ['brush','bgBlur','bokeh','bokehSize','haze','edgeSoft','bright','sat','contrast','warmth','glow','clarity'];
   sliderIds.forEach(id => { const el=$(id), out=$(id+'Out'); if(out){ out.textContent = el.value; el.addEventListener('input',()=> out.textContent = el.value); }});
 
   let fullImg = null, fullW = 0, fullH = 0;
@@ -133,20 +134,30 @@ input[type=range]{flex:1;accent-color:var(--accent)}
   let srcCanvas = null, maskCanvas = null;
   let cachedBg = null, cachedFg = null, cachedBokeh = null;
   let showAfter = true, drawMode = 'paint', drawing = false, lastPt = null;
-  let currentPreset = 'flowerLight';
+  let currentPreset = 'sampleMatch';
   const WORK_MAX = 1400;
 
   const PRESETS = {
-    flowerLight:{bright:112,sat:102,contrast:96,warmth:14,glow:24,clarity:42,bgBlur:20,bokeh:24,bokehSize:24,edgeSoft:7},
-    softBloom: {bright:108,sat:94,contrast:93,warmth:10,glow:28,clarity:34,bgBlur:18,bokeh:18,bokehSize:20,edgeSoft:7},
-    clearCute: {bright:104,sat:112,contrast:104,warmth:6,glow:11,clarity:58,bgBlur:15,bokeh:10,bokehSize:18,edgeSoft:5},
-    paleDream: {bright:118,sat:78,contrast:88,warmth:11,glow:30,clarity:28,bgBlur:20,bokeh:22,bokehSize:26,edgeSoft:8}
+    sampleMatch:{bright:118,sat:86,contrast:89,warmth:16,glow:34,clarity:48,bgBlur:30,bokeh:40,bokehSize:36,haze:22,edgeSoft:8},
+    flowerLight:{bright:114,sat:98,contrast:94,warmth:14,glow:26,clarity:42,bgBlur:26,bokeh:32,bokehSize:30,haze:16,edgeSoft:7},
+    softBloom: {bright:110,sat:92,contrast:91,warmth:10,glow:30,clarity:36,bgBlur:24,bokeh:28,bokehSize:26,haze:18,edgeSoft:7},
+    paleDream: {bright:120,sat:74,contrast:84,warmth:11,glow:34,clarity:30,bgBlur:28,bokeh:34,bokehSize:34,haze:24,edgeSoft:8}
   };
 
   function setStatus(msg){ status.textContent = msg; }
   function offscreen(w,h){ const c=document.createElement('canvas'); c.width=w; c.height=h; return c; }
   function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
   function rand(x,y){ const s=Math.sin(x*12.9898+y*78.233)*43758.5453123; return s-Math.floor(s); }
+  function drawHexPath(c, x, y, r){
+    c.beginPath();
+    for(let i=0;i<6;i++){
+      const a = -Math.PI/2 + i * Math.PI/3;
+      const px = x + Math.cos(a) * r;
+      const py = y + Math.sin(a) * r;
+      if(i===0) c.moveTo(px,py); else c.lineTo(px,py);
+    }
+    c.closePath();
+  }
 
   async function decodeFile(file){
     if ('createImageBitmap' in window) {
@@ -176,6 +187,7 @@ input[type=range]{flex:1;accent-color:var(--accent)}
       bgBlur:+$('bgBlur').value,
       bokeh:+$('bokeh').value,
       bokehSize:+$('bokehSize').value,
+      haze:+$('haze').value,
       edgeSoft:+$('edgeSoft').value
     };
   }
@@ -231,6 +243,17 @@ input[type=range]{flex:1;accent-color:var(--accent)}
       cctx.globalAlpha=1;
       cctx.globalCompositeOperation='source-over';
     }
+
+    if(v.haze > 0){
+      const haze = clamp(v.haze / 100, 0, 0.4);
+      const g2 = cctx.createRadialGradient(w*0.5,h*0.35,0,w*0.5,h*0.38,Math.max(w,h)*0.75);
+      g2.addColorStop(0, `rgba(255,248,240,${haze})`);
+      g2.addColorStop(1, 'rgba(255,255,255,0)');
+      cctx.globalCompositeOperation='screen';
+      cctx.fillStyle=g2;
+      cctx.fillRect(0,0,w,h);
+      cctx.globalCompositeOperation='source-over';
+    }
   }
 
   function sharpenCanvas(src, amount){
@@ -263,41 +286,79 @@ input[type=range]{flex:1;accent-color:var(--accent)}
   function generateBokeh(source, w, h, v){
     const out = offscreen(w,h), octx = out.getContext('2d');
     if(v.bokeh <= 0) return out;
-    const sampleW = Math.max(56, Math.round(w/14)), sampleH = Math.max(56, Math.round(h/14));
+
+    const sampleW = Math.max(72, Math.round(w/12)), sampleH = Math.max(72, Math.round(h/12));
     const sample = offscreen(sampleW, sampleH), sctx = sample.getContext('2d');
     sctx.drawImage(source,0,0,sampleW,sampleH);
     const data = sctx.getImageData(0,0,sampleW,sampleH).data;
-    const spacing = Math.max(24, Math.round(v.bokehSize * 2.15));
-    const baseR = Math.max(10, v.bokehSize * 1.25);
+
+    const amount = clamp(v.bokeh / 50, 0, 1);
+    const count = Math.round(90 + amount * 170);
+    const largeCount = Math.round(16 + amount * 26);
+    const baseR = Math.max(10, v.bokehSize * 1.05);
     octx.globalCompositeOperation='screen';
 
-    for(let y = spacing/2; y < h; y += spacing){
-      for(let x = spacing/2; x < w; x += spacing){
-        const rx = x + (rand(x,y)-0.5)*spacing*0.8;
-        const ry = y + (rand(y,x)-0.5)*spacing*0.8;
-        const sx = clamp(Math.floor(rx / w * sampleW), 0, sampleW-1);
-        const sy = clamp(Math.floor(ry / h * sampleH), 0, sampleH-1);
-        const i = (sy * sampleW + sx) * 4;
-        const r = data[i], g = data[i+1], b = data[i+2];
-        const lum = 0.2126*r + 0.7152*g + 0.0722*b;
-        const chance = rand(rx*0.71, ry*0.53);
-        if(lum < 145 || chance > (v.bokeh/48 + Math.max(0, lum-145)/240)) continue;
+    function sampleColor(px, py){
+      const sx = clamp(Math.floor(px / w * sampleW), 0, sampleW-1);
+      const sy = clamp(Math.floor(py / h * sampleH), 0, sampleH-1);
+      const i = (sy * sampleW + sx) * 4;
+      return [data[i], data[i+1], data[i+2], 0.2126*data[i] + 0.7152*data[i+1] + 0.0722*data[i+2]];
+    }
 
-        const alpha = clamp(((lum-135)/120) * (v.bokeh/40) * 0.65, 0.05, 0.48);
-        const radius = baseR * (0.65 + lum/255 * 0.9) * (0.9 + rand(rx,ry)*0.4);
-        const grad = octx.createRadialGradient(rx,ry,0,rx,ry,radius);
-        grad.addColorStop(0, `rgba(255,255,255,${alpha*0.95})`);
-        grad.addColorStop(0.18, `rgba(${r},${g},${b},${alpha})`);
-        grad.addColorStop(0.72, `rgba(${r},${g},${b},${alpha*0.45})`);
-        grad.addColorStop(1, 'rgba(255,255,255,0)');
-        octx.fillStyle = grad;
-        octx.beginPath();
-        octx.arc(rx,ry,radius,0,Math.PI*2);
+    function drawBokehShape(x, y, radius, alpha, rgb, shape){
+      const [r,g,b] = rgb;
+      const grad = octx.createRadialGradient(x,y,0,x,y,radius);
+      grad.addColorStop(0, `rgba(255,255,255,${alpha})`);
+      grad.addColorStop(0.22, `rgba(${Math.min(255,r+25)},${Math.min(255,g+25)},${Math.min(255,b+25)},${alpha*0.88})`);
+      grad.addColorStop(0.7, `rgba(${r},${g},${b},${alpha*0.28})`);
+      grad.addColorStop(1, 'rgba(255,255,255,0)');
+      octx.fillStyle = grad;
+      if(shape === 'hex'){
+        drawHexPath(octx, x, y, radius);
         octx.fill();
+        octx.strokeStyle = `rgba(255,255,255,${alpha*0.52})`;
+        octx.lineWidth = Math.max(1.5, radius*0.08);
+        drawHexPath(octx, x, y, radius*0.72);
+        octx.stroke();
+      } else {
+        octx.beginPath();
+        octx.arc(x,y,radius,0,Math.PI*2);
+        octx.fill();
+        octx.strokeStyle = `rgba(255,255,255,${alpha*0.48})`;
+        octx.lineWidth = Math.max(1.2, radius*0.08);
+        octx.beginPath();
+        octx.arc(x,y,radius*0.7,0,Math.PI*2);
+        octx.stroke();
       }
     }
-    octx.globalCompositeOperation='source-over';
-    return out;
+
+    for(let i=0; i<count; i++){
+      const rx = rand(i*13.4+4.7, i*9.2+11.4) * w;
+      const ry = rand(i*8.1+91.7, i*4.3+10.2) * h;
+      const [r,g,b,lum] = sampleColor(rx, ry);
+      const topBoost = 1 - (ry / h) * 0.45;
+      const appear = 0.32 + amount*0.55 + Math.max(0, lum-95)/230 + topBoost*0.12;
+      if(rand(rx*0.31+i, ry*0.27+2) > appear) continue;
+      const radius = baseR * (0.5 + rand(i, rx)*0.7) * (0.8 + lum/255*0.55);
+      const alpha = clamp((0.14 + amount*0.28 + Math.max(0, lum-95)/360) * (0.9 + topBoost*0.25), 0.08, 0.52);
+      drawBokehShape(rx, ry, radius, alpha, [r,g,b], rand(i*5.2, ry) > 0.48 ? 'hex' : 'circle');
+    }
+
+    // 大きめの印象的な玉ボケを追加
+    for(let i=0; i<largeCount; i++){
+      const rx = rand(i*7.8+33.1, i*5.7+98.4) * w;
+      const ry = rand(i*6.1+21.5, i*3.4+77.7) * h * 0.88;
+      const [r,g,b,lum] = sampleColor(rx, ry);
+      const radius = baseR * (1.25 + rand(rx,i)*0.95);
+      const alpha = clamp(0.16 + amount*0.22 + Math.max(0, lum-110)/420, 0.10, 0.40);
+      drawBokehShape(rx, ry, radius, alpha, [r,g,b], rand(i*2.1, rx) > 0.35 ? 'hex' : 'circle');
+    }
+
+    const softened = offscreen(w,h), s2=softened.getContext('2d');
+    s2.filter = `blur(${Math.max(1.4, v.bokehSize*0.13)}px)`;
+    s2.drawImage(out,0,0);
+    s2.filter = 'none';
+    return softened;
   }
 
   function softMask(mask, w, h, edge){
@@ -360,12 +421,12 @@ input[type=range]{flex:1;accent-color:var(--accent)}
   }
 
   function drawMaskOverlay(){
-    if(!maskCanvas || !showAfter) return;
+    if(!maskCanvas || !showAfter || !drawing) return;
     ctx.save();
-    ctx.globalAlpha = 0.12;
+    ctx.globalAlpha = 0.10;
     ctx.drawImage(maskCanvas,0,0,workW,workH);
     ctx.globalCompositeOperation = 'source-atop';
-    ctx.fillStyle = 'rgba(255,220,160,0.26)';
+    ctx.fillStyle = 'rgba(255,220,160,0.24)';
     ctx.fillRect(0,0,workW,workH);
     ctx.restore();
   }
@@ -453,7 +514,7 @@ input[type=range]{flex:1;accent-color:var(--accent)}
   $('btnBefore').addEventListener('click', ()=>{ showAfter=false; $('btnBefore').classList.add('active'); $('btnAfter').classList.remove('active'); render(); });
   $('btnAfter').addEventListener('click', ()=>{ showAfter=true; $('btnAfter').classList.add('active'); $('btnBefore').classList.remove('active'); render(); });
 
-  ['bgBlur','bokeh','bokehSize','bright','sat','contrast','warmth','glow','clarity'].forEach(id => $(id).addEventListener('input', ()=>{ if(srcCanvas){ recomputeLayers(srcCanvas, workW, workH); render(); }}));
+  ['bgBlur','bokeh','bokehSize','haze','bright','sat','contrast','warmth','glow','clarity'].forEach(id => $(id).addEventListener('input', ()=>{ if(srcCanvas){ recomputeLayers(srcCanvas, workW, workH); render(); }}));
   $('edgeSoft').addEventListener('input', render);
   $('btnClearMask').addEventListener('click', ()=>{ if(!maskCanvas) return; maskCanvas.getContext('2d').clearRect(0,0,workW,workH); render(); });
   $('btnFillMask').addEventListener('click', ()=>{ if(!maskCanvas) return; const mctx=maskCanvas.getContext('2d'); mctx.clearRect(0,0,workW,workH); mctx.fillStyle='#fff'; mctx.filter='blur(18px)'; mctx.beginPath(); mctx.ellipse(workW*0.5, workH*0.52, workW*0.24, workH*0.34, 0, 0, Math.PI*2); mctx.fill(); mctx.filter='none'; render(); });
