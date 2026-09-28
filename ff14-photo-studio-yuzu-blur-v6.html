@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#17171b">
+<title>FF14 Photo Studio Auto Background Blur v6</title>
+<style>
+:root{--bg:#17171b;--panel:#1f2024;--panel2:#26272c;--accent:#c9a869;--text:#ebe6dc;--dim:#a39f95;--border:#34343b}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif}
+body{min-height:100vh}
+.app{max-width:1120px;margin:0 auto;padding-bottom:40px}
+header{padding:18px 16px 8px}
+h1{margin:0;font-size:23px;color:var(--accent);font-family:Georgia,serif}
+.sub{margin:4px 0 0;color:var(--dim);font-size:13px;line-height:1.55}
+.layout{display:grid;grid-template-columns:minmax(320px,1fr) 330px;gap:18px;padding:8px 16px 0}
+@media (max-width:900px){.layout{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px}
+.stage-empty{text-align:center;padding:28px 16px}
+.file-label,.btn{display:inline-block;width:100%;padding:12px 14px;border-radius:10px;background:var(--accent);color:#181818;font-weight:700;text-align:center;border:none;font-size:15px;cursor:pointer}
+.btn.secondary{background:var(--panel2);color:var(--text);border:1px solid var(--border)}
+.fileInput{display:none}
+.status{margin-top:12px;color:var(--dim);font-size:12px;white-space:pre-wrap;line-height:1.5}
+.canvas-wrap{display:none;position:relative}
+#canvas{display:block;width:100%;height:auto;max-height:76vh;border-radius:12px;background:#111;box-shadow:0 8px 30px rgba(0,0,0,.35)}
+#maskPaintCanvas{position:absolute;inset:0;width:100%;height:100%;border-radius:12px;touch-action:none;pointer-events:none;z-index:5}
+.canvas-wrap.is-correcting #maskPaintCanvas{pointer-events:auto;cursor:crosshair}
+.small-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.small-actions button{padding:9px;border-radius:9px;border:1px solid var(--border);background:var(--panel2);color:var(--text);font-size:12px}
+.small-actions button.active{background:var(--accent);color:#191919;border-color:var(--accent)}
+.panel{padding-bottom:12px}
+.group{padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--panel);margin-bottom:12px}
+.group h2{margin:0 0 10px;font-size:12px;color:var(--dim);letter-spacing:.04em}
+.row{display:flex;align-items:center;gap:10px;margin:10px 0;font-size:13px}
+.row span{width:98px;flex:0 0 auto}
+.row output{width:42px;text-align:right;color:var(--dim);font-size:12px}
+input[type=range]{flex:1;accent-color:var(--accent)}
+.toggle,.presets{display:grid;gap:8px}.toggle{grid-template-columns:1fr 1fr}.presets{grid-template-columns:1fr 1fr}
+.toggle button,.presets button{padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--panel2);color:var(--text);font-size:13px;cursor:pointer}
+.toggle button.active,.presets button.active{background:var(--accent);color:#191919;border-color:var(--accent)}
+.check{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);margin-top:8px}
+.mini{font-size:12px;color:var(--dim);line-height:1.55;margin:0 0 10px}
+.badge{display:inline-flex;align-items:center;gap:6px;padding:6px 9px;border-radius:999px;background:var(--panel2);border:1px solid var(--border);font-size:11px;color:var(--dim);margin-top:8px}
+.dot{width:7px;height:7px;border-radius:50%;background:#8f8}
+.dot.loading{background:#e9c16f}.dot.error{background:#e78989}
+.footer-note{padding:0 16px;margin-top:10px;color:var(--dim);font-size:12px;line-height:1.6}
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+  <h1>FF14 Photo Studio</h1>
+  <p class="sub">自動背景ぼかし＋GShade風フィルタ。元ツールと同じ自動人物判定に加え、誤判定を直す補正ブラシを使えます。人物くっきりも調整できます。v6では人物保護を強めて、体にぼかしが乗りにくいよう調整しています。PNG保存時に (C) SQUARE ENIX を入れられます。</p>
+</header>
+<div class="layout">
+  <section>
+    <div class="card stage-empty" id="pickerCard">
+      <label class="file-label" for="fileInput">画像を選ぶ</label>
+      <div class="status" id="status">JPEG / PNG / HEIC 読み込み対応（HEIC は環境により読めない場合あり）</div>
+    </div>
+    <div class="canvas-wrap" id="canvasWrap"><canvas id="canvas"></canvas>
+        <canvas id="maskPaintCanvas"></canvas></div>
+  </section>
+  <aside class="panel" id="panel" style="display:none;">
+    <div class="group">
+      <h2>表示</h2>
+      <div class="toggle"><button id="btnBefore">加工前</button><button id="btnAfter" class="active">加工後</button></div>
+    </div>
+
+    <div class="group">
+      <h2>自動背景ぼかし</h2>
+      <p class="mini">人物を自動判定して、背景にだけぼかしをかけます。初回だけ判定モデルを読み込むためネット接続が必要です。</p>
+      <label class="check"><input type="checkbox" id="blurOn" checked> 背景ぼかしを使う</label>
+      <div class="row"><span>ぼかしの強さ</span><input id="blurStrength" type="range" min="2" max="30" value="12"><output id="blurStrengthOut">12</output></div>
+      <label class="check"><input type="checkbox" id="correctionOn"> 補正ブラシを使う</label>
+      <div class="small-actions">
+        <button type="button" id="restoreBtn" class="active">鮮明に戻す</button>
+        <button type="button" id="addBlurBtn">ぼかしを足す</button>
+      </div>
+      <div class="row"><span>ブラシ太さ</span><input id="brushSize" type="range" min="10" max="120" value="42"><output id="brushSizeOut">42</output></div>
+      <button class="btn secondary" type="button" id="clearCorrection" style="margin-top:8px;">補正をリセット</button>
+      <p class="mini" style="margin-top:10px;">自動判定で腕・耳・装飾などがぼけた時は「鮮明に戻す」でその部分をなぞってください。元のYuzu Pic Studioと同じ補正方式です。</p>
+      <div class="badge"><span class="dot loading" id="segDot"></span><span id="segStatus">人物判定の準備中</span></div>
+    </div>
+
+    <div class="group">
+      <h2>GShade風フィルタ</h2>
+      <div class="presets" id="presetWrap">
+        <button data-preset="sampleMatch" class="active">見本寄せ</button>
+        <button data-preset="flowerLight">花園</button>
+        <button data-preset="softBloom">ふんわり</button>
+        <button data-preset="paleDream">淡め</button>
+      </div>
+      <div class="row"><span>明るさ</span><input id="bright" type="range" min="70" max="145" value="118"><output id="brightOut">118</output></div>
+      <div class="row"><span>彩度</span><input id="sat" type="range" min="40" max="180" value="86"><output id="satOut">86</output></div>
+      <div class="row"><span>コントラスト</span><input id="contrast" type="range" min="70" max="150" value="90"><output id="contrastOut">90</output></div>
+      <div class="row"><span>暖かさ</span><input id="warmth" type="range" min="-30" max="30" value="16"><output id="warmthOut">16</output></div>
+      <div class="row"><span>ふんわり光</span><input id="glow" type="range" min="0" max="45" value="24"><output id="glowOut">24</output></div>
+      <div class="row"><span>人物くっきり</span><input id="subjectPop" type="range" min="0" max="40" value="16"><output id="subjectPopOut">16</output></div>
+    </div>
+
+    <div class="group">
+      <h2>書き出し</h2>
+      <label class="check"><input type="checkbox" id="copyrightOn" checked> (C) SQUARE ENIX を入れる</label>
+      <button class="btn" id="btnSave" style="margin-top:12px;">PNGで保存</button>
+      <button class="btn secondary" id="btnNew" style="margin-top:8px;">別の画像を選ぶ</button>
+    </div>
+  </aside>
+</div>
+<input type="file" id="fileInput" class="fileInput" accept="image/*,.heic,.heif,image/heic,image/heif">
+<p class="footer-note">※ 背景ぼかしは、提供されたYuzu Pic Studioコードと同じ「人物自動判定＋縮小拡大式ぼかし」をベースに、v6では人物の縁を守る保護処理を追加しています。</p>
+</div>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const MEDIAPIPE_VERSION = '0.10.14';
+  const fileInput=$('fileInput'), pickerCard=$('pickerCard'), status=$('status'), panel=$('panel'), canvasWrap=$('canvasWrap'), canvas=$('canvas'), ctx=canvas.getContext('2d');
+  const segDot=$('segDot'), segStatus=$('segStatus');
+  const sliderIds=['blurStrength','brushSize','bright','sat','contrast','warmth','glow','subjectPop'];
+  sliderIds.forEach(id=>{const el=$(id), out=$(id+'Out'); out.textContent=el.value; el.addEventListener('input',()=>out.textContent=el.value);});
+
+  let fullImg=null, fullW=0, fullH=0, workW=0, workH=0, srcCanvas=null;
+  let showAfter=true, currentPreset='sampleMatch';
+  let imageSegmenterInstance=null, autoBackgroundMask=null, segLoading=false, segError=null;
+
+  // 補正ブラシ用。v4ではこの宣言が抜けていたため、
+  // 画像読み込み後の描画がReferenceErrorで停止していました。
+  const maskPaintCanvas=$('maskPaintCanvas');
+  const maskPaintCtx=maskPaintCanvas.getContext('2d');
+  let addBlurMask=null;
+  let restoreSharpMask=null;
+  let correctionMode='restore';
+  let painting=false;
+  let lastPaint=null;
+
+  const WORK_MAX=1600;
+
+  const PRESETS={
+    sampleMatch:{bright:118,sat:86,contrast:90,warmth:16,glow:24,subjectPop:16},
+    flowerLight:{bright:114,sat:98,contrast:95,warmth:14,glow:20,subjectPop:12},
+    softBloom:{bright:110,sat:92,contrast:91,warmth:10,glow:26,subjectPop:10},
+    paleDream:{bright:120,sat:74,contrast:85,warmth:11,glow:28,subjectPop:8}
+  };
+
+  function offscreen(w,h){const c=document.createElement('canvas');c.width=w;c.height=h;return c;}
+  function clamp01(v){return Math.max(0,Math.min(1,v));}
+  function smoothstep(edge0,edge1,x){const t=clamp01((x-edge0)/(edge1-edge0));return t*t*(3-2*t);}
+  function setStatus(msg){status.textContent=msg;}
+  function updateSegUI(){
+    segDot.className='dot';
+    if(segLoading){segDot.classList.add('loading');segStatus.textContent='人物判定中…';}
+    else if(segError){segDot.classList.add('error');segStatus.textContent='人物判定に失敗';}
+    else if(autoBackgroundMask){segStatus.textContent='人物判定完了';}
+    else {segDot.classList.add('loading');segStatus.textContent='人物判定の準備中';}
+  }
+
+  async function decodeFile(file){
+    if('createImageBitmap' in window){try{return await createImageBitmap(file);}catch(e){}}
+    return await new Promise((resolve,reject)=>{
+      const reader=new FileReader();
+      reader.onerror=()=>reject(new Error('FileReaderで読み込めませんでした'));
+      reader.onload=()=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=()=>reject(new Error('画像デコードに失敗しました'));img.src=reader.result;};
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function ensureImageSegmenterLoaded(){
+    if(imageSegmenterInstance) return imageSegmenterInstance;
+    const vision = await import(`https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MEDIAPIPE_VERSION}/vision_bundle.mjs`);
+    const filesetResolver = await vision.FilesetResolver.forVisionTasks(`https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MEDIAPIPE_VERSION}/wasm`);
+    imageSegmenterInstance = await vision.ImageSegmenter.createFromOptions(filesetResolver,{
+      baseOptions:{modelAssetPath:'https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite'},
+      runningMode:'IMAGE', outputCategoryMask:false, outputConfidenceMasks:true
+    });
+    return imageSegmenterInstance;
+  }
+
+  async function computeAutoBackgroundMask(){
+    if(!fullImg || segLoading) return;
+    segLoading=true;segError=null;updateSegUI();
+    try{
+      const segmenter=await ensureImageSegmenterLoaded();
+      const result=segmenter.segment(fullImg);
+      const confidenceMask=result.confidenceMasks[0];
+      const floats=confidenceMask.getAsFloat32Array();
+      const mw=confidenceMask.width, mh=confidenceMask.height;
+
+      // Yuzu Pic Studioと同じ考え方：人物信頼度をそのまま反転して背景マスクにする
+      const raw=offscreen(mw,mh), rctx=raw.getContext('2d');
+      const imgData=rctx.createImageData(mw,mh);
+      for(let i=0;i<floats.length;i++){
+        const bgAlpha=Math.round((1-floats[i])*255);
+        imgData.data[i*4]=255;
+        imgData.data[i*4+1]=255;
+        imgData.data[i*4+2]=255;
+        imgData.data[i*4+3]=bgAlpha;
+      }
+      rctx.putImageData(imgData,0,0);
+      confidenceMask.close();
+      if(typeof result.close==='function') result.close();
+
+      autoBackgroundMask=offscreen(workW,workH);
+      const mctx=autoBackgroundMask.getContext('2d');
+      mctx.imageSmoothingEnabled=true;
+      if('imageSmoothingQuality' in mctx) mctx.imageSmoothingQuality='high';
+      mctx.drawImage(raw,0,0,workW,workH);
+
+      addBlurMask=offscreen(workW,workH);
+      restoreSharpMask=offscreen(workW,workH);
+      maskPaintCanvas.width=workW;maskPaintCanvas.height=workH;
+      maskPaintCtx.clearRect(0,0,workW,workH);
+    }catch(err){
+      console.error(err);segError=String(err?.message||err);autoBackgroundMask=null;
+    }finally{segLoading=false;updateSegUI();render();}
+  }
+
+  function remapBackgroundMaskAlpha(maskCanvas,w,h,low=0.34,high=0.78){
+    const out=offscreen(w,h), octx=out.getContext('2d');
+    octx.drawImage(maskCanvas,0,0,w,h);
+    const img=octx.getImageData(0,0,w,h), d=img.data;
+    for(let i=0;i<d.length;i+=4){
+      const a=d[i+3]/255;
+      let na=smoothstep(low,high,a);
+      if(na<0.015) na=0;
+      d[i]=255; d[i+1]=255; d[i+2]=255; d[i+3]=Math.round(na*255);
+    }
+    octx.putImageData(img,0,0);
+    return out;
+  }
+
+  function softenMaskEdge(maskCanvas,w,h,blurPx){
+    if(blurPx<=0) return maskCanvas;
+    const out=offscreen(w,h), octx=out.getContext('2d');
+    octx.filter=`blur(${blurPx}px)`;
+    octx.drawImage(maskCanvas,0,0,w,h);
+    octx.filter='none';
+    return out;
+  }
+
+  function buildProtectedBackgroundMask(baseMask,w,h){
+    if(!baseMask) return null;
+
+    // 1) あいまいな背景判定を抑えて、人物側へぼかしが食い込みにくくする
+    let refined=remapBackgroundMaskAlpha(baseMask,w,h,0.34,0.78);
+
+    // 2) 人物マスクを少し膨らませて保護帯を作り、腕・服・耳の縁を守る
+    const subjectMask=subjectMaskFromBackgroundMask(refined,w,h);
+    const protectBlur=Math.max(2,Math.round(Math.max(w,h)/280));
+    const protect=offscreen(w,h), pctx=protect.getContext('2d');
+    pctx.filter=`blur(${protectBlur}px)`;
+    pctx.drawImage(subjectMask,0,0,w,h);
+    pctx.filter='none';
+    const protectImg=pctx.getImageData(0,0,w,h), pd=protectImg.data;
+    for(let i=0;i<pd.length;i+=4){
+      const a=pd[i+3]/255;
+      const na=smoothstep(0.06,0.42,a);
+      pd[i]=255; pd[i+1]=255; pd[i+2]=255; pd[i+3]=Math.round(na*255);
+    }
+    pctx.putImageData(protectImg,0,0);
+
+    const cut=offscreen(w,h), cctx=cut.getContext('2d');
+    cctx.drawImage(refined,0,0,w,h);
+    cctx.globalCompositeOperation='destination-out';
+    cctx.drawImage(protect,0,0,w,h);
+    cctx.globalCompositeOperation='source-over';
+
+    // 3) 最後に境目だけ少しなじませる
+    refined=softenMaskEdge(cut,w,h,1.2);
+    refined=remapBackgroundMaskAlpha(refined,w,h,0.03,0.97);
+    return refined;
+  }
+
+  function buildEffectiveBackgroundMask(w,h){
+    if(!autoBackgroundMask && !addBlurMask) return null;
+    const out=offscreen(w,h), octx=out.getContext('2d');
+    if(autoBackgroundMask) octx.drawImage(autoBackgroundMask,0,0,workW,workH,0,0,w,h);
+    if(addBlurMask) octx.drawImage(addBlurMask,0,0,workW,workH,0,0,w,h);
+    if(restoreSharpMask){
+      octx.globalCompositeOperation='destination-out';
+      octx.drawImage(restoreSharpMask,0,0,workW,workH,0,0,w,h);
+      octx.globalCompositeOperation='source-over';
+    }
+    return buildProtectedBackgroundMask(out,w,h);
+  }
+
+
+  // Yuzu Pic Studioと同じ考え方: 一度小さく縮めてから拡大して滑らかなぼかしを作る
+  function buildScaleBlur(source,w,h,radiusPx){
+    if(radiusPx<=0){const c=offscreen(w,h);c.getContext('2d').drawImage(source,0,0,w,h);return c;}
+    const targetScale=Math.min(1,1/(radiusPx*.55));
+    const targetW=Math.max(2,Math.round(w*targetScale));
+    const targetH=Math.max(2,Math.round(h*targetScale));
+    let cw=w,ch=h;
+    let cur=offscreen(cw,ch);
+    let cctx=cur.getContext('2d'); cctx.imageSmoothingEnabled=true; if('imageSmoothingQuality' in cctx)cctx.imageSmoothingQuality='high'; cctx.drawImage(source,0,0,w,h,0,0,cw,ch);
+    while(cw>targetW && ch>targetH && cw>4 && ch>4){
+      const nw=Math.max(2,Math.round(cw/2)), nh=Math.max(2,Math.round(ch/2));
+      const next=offscreen(nw,nh), nctx=next.getContext('2d'); nctx.imageSmoothingEnabled=true; if('imageSmoothingQuality' in nctx)nctx.imageSmoothingQuality='high'; nctx.drawImage(cur,0,0,cw,ch,0,0,nw,nh); cur=next; cw=nw; ch=nh;
+    }
+    if(cw!==targetW||ch!==targetH){const trimmed=offscreen(targetW,targetH), tctx=trimmed.getContext('2d');tctx.imageSmoothingEnabled=true;if('imageSmoothingQuality' in tctx)tctx.imageSmoothingQuality='high';tctx.drawImage(cur,0,0,cw,ch,0,0,targetW,targetH);cur=trimmed;cw=targetW;ch=targetH;}
+    const out=offscreen(w,h), octx=out.getContext('2d');octx.imageSmoothingEnabled=true;if('imageSmoothingQuality' in octx)octx.imageSmoothingQuality='high';octx.drawImage(cur,0,0,cw,ch,0,0,w,h);return out;
+  }
+
+  function subjectMaskFromBackgroundMask(mask,w,h){
+    const out=offscreen(w,h);
+    const octx=out.getContext('2d');
+    octx.fillStyle='#fff';
+    octx.fillRect(0,0,w,h);
+    octx.globalCompositeOperation='destination-out';
+    octx.drawImage(mask,0,0,w,h);
+    octx.globalCompositeOperation='source-over';
+    return out;
+  }
+
+  function sharpenCanvas(source,w,h,amount){
+    const srcC=offscreen(w,h);
+    const sctx=srcC.getContext('2d');
+    sctx.drawImage(source,0,0,w,h);
+    const src=sctx.getImageData(0,0,w,h);
+    const s=src.data;
+    const out=offscreen(w,h);
+    const octx=out.getContext('2d');
+    const dst=octx.createImageData(w,h);
+    const d=dst.data;
+    const t=Math.max(0,Math.min(1,amount/40));
+    const center=1+4*t;
+    const edge=-t;
+    const clamp255=v=>Math.max(0,Math.min(255,v));
+
+    for(let y=0;y<h;y++){
+      for(let x=0;x<w;x++){
+        const idx=(y*w+x)*4;
+        if(x===0||y===0||x===w-1||y===h-1){
+          d[idx]=s[idx]; d[idx+1]=s[idx+1]; d[idx+2]=s[idx+2]; d[idx+3]=s[idx+3];
+          continue;
+        }
+        const top=((y-1)*w+x)*4;
+        const bottom=((y+1)*w+x)*4;
+        const left=(y*w+(x-1))*4;
+        const right=(y*w+(x+1))*4;
+        d[idx]=clamp255(s[idx]*center+s[top]*edge+s[bottom]*edge+s[left]*edge+s[right]*edge);
+        d[idx+1]=clamp255(s[idx+1]*center+s[top+1]*edge+s[bottom+1]*edge+s[left+1]*edge+s[right+1]*edge);
+        d[idx+2]=clamp255(s[idx+2]*center+s[top+2]*edge+s[bottom+2]*edge+s[left+2]*edge+s[right+2]*edge);
+        d[idx+3]=s[idx+3];
+      }
+    }
+    octx.putImageData(dst,0,0);
+    return out;
+  }
+
+  function applySubjectPop(source,w,h,backgroundMask,amount){
+    if(!backgroundMask || amount<=0) return source;
+    const subjectMask=subjectMaskFromBackgroundMask(backgroundMask,w,h);
+    const sharpened=sharpenCanvas(source,w,h,amount);
+    const sharpSubject=offscreen(w,h);
+    const ssctx=sharpSubject.getContext('2d');
+    ssctx.drawImage(sharpened,0,0);
+    ssctx.globalCompositeOperation='destination-in';
+    ssctx.drawImage(subjectMask,0,0,w,h);
+    ssctx.globalCompositeOperation='source-over';
+
+    const out=offscreen(w,h);
+    const octx=out.getContext('2d');
+    octx.drawImage(source,0,0);
+    octx.globalAlpha=Math.min(0.9,amount/24);
+    octx.drawImage(sharpSubject,0,0);
+    octx.globalAlpha=1;
+    return out;
+  }
+
+  function values(){return{bright:+$('bright').value/100,sat:+$('sat').value/100,contrast:+$('contrast').value/100,warmth:+$('warmth').value,glow:+$('glow').value,blur:+$('blurStrength').value,subjectPop:+$('subjectPop').value};}
+
+  function applyFilter(src,w,h){
+    const v=values(), out=offscreen(w,h), octx=out.getContext('2d');
+    octx.filter=`brightness(${v.bright}) saturate(${v.sat}) contrast(${v.contrast})`;
+    octx.drawImage(src,0,0,w,h);octx.filter='none';
+    if(v.warmth!==0){const warm=Math.max(0,v.warmth),cool=Math.max(0,-v.warmth);if(warm){octx.globalCompositeOperation='soft-light';octx.fillStyle=`rgba(255,186,130,${warm/110})`;octx.fillRect(0,0,w,h);}if(cool){octx.globalCompositeOperation='soft-light';octx.fillStyle=`rgba(120,188,255,${cool/120})`;octx.fillRect(0,0,w,h);}octx.globalCompositeOperation='source-over';}
+    if(currentPreset==='flowerLight'){octx.globalCompositeOperation='soft-light';const g=octx.createLinearGradient(0,0,w,h);g.addColorStop(0,'rgba(255,214,214,.13)');g.addColorStop(1,'rgba(255,240,200,.12)');octx.fillStyle=g;octx.fillRect(0,0,w,h);octx.globalCompositeOperation='source-over';}
+    else if(currentPreset==='softBloom'){octx.globalCompositeOperation='screen';octx.fillStyle='rgba(255,245,240,.08)';octx.fillRect(0,0,w,h);octx.globalCompositeOperation='source-over';}
+    else if(currentPreset==='paleDream'||currentPreset==='sampleMatch'){octx.globalCompositeOperation='screen';octx.fillStyle='rgba(255,255,255,.10)';octx.fillRect(0,0,w,h);octx.globalCompositeOperation='source-over';}
+    if(v.glow>0){const glow=offscreen(w,h),gctx=glow.getContext('2d');gctx.filter=`blur(${Math.max(2,v.glow*.7)}px)`;gctx.drawImage(out,0,0);octx.globalCompositeOperation='screen';octx.globalAlpha=Math.min(.48,v.glow/90);octx.drawImage(glow,0,0);octx.globalAlpha=1;octx.globalCompositeOperation='source-over';}
+    return out;
+  }
+
+  function composeProcessed(src,w,h,mask){
+    const filtered=applyFilter(src,w,h);
+    const v=values();
+    let out=filtered;
+
+    if($('blurOn').checked && mask){
+      const blurred=buildScaleBlur(filtered,w,h,v.blur);
+      const blurLayer=offscreen(w,h);
+      const bctx=blurLayer.getContext('2d');
+      bctx.drawImage(blurred,0,0);
+      bctx.globalCompositeOperation='destination-in';
+      bctx.drawImage(mask,0,0,w,h);
+      bctx.globalCompositeOperation='source-over';
+
+      const merged=offscreen(w,h);
+      const mctx=merged.getContext('2d');
+      mctx.drawImage(filtered,0,0);
+      mctx.drawImage(blurLayer,0,0);
+      out=merged;
+    }
+
+    if(v.subjectPop>0 && mask){
+      out=applySubjectPop(out,w,h,mask,v.subjectPop);
+    }
+    return out;
+  }
+
+  function render(){
+    if(!srcCanvas)return;
+    ctx.clearRect(0,0,workW,workH);
+    if(!showAfter){ctx.drawImage(srcCanvas,0,0);return;}
+    const effective=buildEffectiveBackgroundMask(workW,workH);const out=composeProcessed(srcCanvas,workW,workH,effective);ctx.drawImage(out,0,0);
+  }
+
+  function applyPreset(name){currentPreset=name;const p=PRESETS[name];Object.keys(p).forEach(k=>{$(k).value=p[k];$(k+'Out').textContent=p[k];});document.querySelectorAll('#presetWrap button').forEach(b=>b.classList.toggle('active',b.dataset.preset===name));render();}
+  document.querySelectorAll('#presetWrap button').forEach(btn=>btn.addEventListener('click',()=>applyPreset(btn.dataset.preset)));
+
+  fileInput.addEventListener('change',async()=>{
+    const file=fileInput.files&&fileInput.files[0];if(!file)return;
+    setStatus(`読み込み中…\n${file.name}\n${file.type||'MIME不明'} / ${Math.round(file.size/1024)} KB`);
+    try{
+      const decoded=await decodeFile(file);fullImg=decoded;fullW=decoded.width||decoded.naturalWidth;fullH=decoded.height||decoded.naturalHeight;if(!fullW||!fullH)throw new Error('画像サイズを取得できませんでした');
+      const scale=Math.min(1,WORK_MAX/Math.max(fullW,fullH));workW=Math.max(1,Math.round(fullW*scale));workH=Math.max(1,Math.round(fullH*scale));
+      srcCanvas=offscreen(workW,workH);
+      srcCanvas.getContext('2d').drawImage(fullImg,0,0,workW,workH);
+      canvas.width=workW;canvas.height=workH;
+      maskPaintCanvas.width=workW;maskPaintCanvas.height=workH;
+      maskPaintCtx.clearRect(0,0,workW,workH);
+      addBlurMask=null;
+      restoreSharpMask=null;
+      painting=false;
+      lastPaint=null;
+      pickerCard.style.display='none';canvasWrap.style.display='block';panel.style.display='block';
+      autoBackgroundMask=null;segError=null;updateSegUI();
+      applyPreset(currentPreset);
+      computeAutoBackgroundMask();
+    }catch(err){setStatus('読み込み失敗\n'+(err&&err.message?err.message:String(err))+'\n\nHEICの場合はJPEG/PNGで試してください。');}
+  });
+
+  $('btnBefore').addEventListener('click',()=>{showAfter=false;$('btnBefore').classList.add('active');$('btnAfter').classList.remove('active');render();});
+  $('btnAfter').addEventListener('click',()=>{showAfter=true;$('btnAfter').classList.add('active');$('btnBefore').classList.remove('active');render();});
+  $('blurOn').addEventListener('change',render);
+  sliderIds.forEach(id=>$(id).addEventListener('input',render));
+  $('correctionOn').addEventListener('change',()=>{canvasWrap.classList.toggle('is-correcting',$('correctionOn').checked);});
+  $('restoreBtn').addEventListener('click',()=>{correctionMode='restore';$('restoreBtn').classList.add('active');$('addBlurBtn').classList.remove('active');});
+  $('addBlurBtn').addEventListener('click',()=>{correctionMode='add';$('addBlurBtn').classList.add('active');$('restoreBtn').classList.remove('active');});
+  $('clearCorrection').addEventListener('click',()=>{if(addBlurMask)addBlurMask.getContext('2d').clearRect(0,0,workW,workH);if(restoreSharpMask)restoreSharpMask.getContext('2d').clearRect(0,0,workW,workH);maskPaintCtx.clearRect(0,0,workW,workH);render();});
+
+  function paintPoint(clientX,clientY){
+    if(!autoBackgroundMask) return;
+    const rect=maskPaintCanvas.getBoundingClientRect();
+    const x=(clientX-rect.left)*(workW/rect.width), y=(clientY-rect.top)*(workH/rect.height);
+    const radius=(+$('brushSize').value/2)*(workW/rect.width);
+    const target=correctionMode==='add'?addBlurMask:restoreSharpMask;
+    const tctx=target.getContext('2d');
+    tctx.strokeStyle='rgba(255,255,255,1)';tctx.fillStyle='rgba(255,255,255,1)';tctx.lineWidth=radius*2;tctx.lineCap='round';tctx.lineJoin='round';
+    if(lastPaint){tctx.beginPath();tctx.moveTo(lastPaint.x,lastPaint.y);tctx.lineTo(x,y);tctx.stroke();}
+    else {tctx.beginPath();tctx.arc(x,y,radius,0,Math.PI*2);tctx.fill();}
+    lastPaint={x,y};
+  }
+  maskPaintCanvas.addEventListener('pointerdown',e=>{if(!$('correctionOn').checked)return;e.preventDefault();painting=true;lastPaint=null;maskPaintCanvas.setPointerCapture(e.pointerId);paintPoint(e.clientX,e.clientY);render();});
+  maskPaintCanvas.addEventListener('pointermove',e=>{if(!painting)return;e.preventDefault();paintPoint(e.clientX,e.clientY);render();});
+  maskPaintCanvas.addEventListener('pointerup',()=>{painting=false;lastPaint=null;});
+  maskPaintCanvas.addEventListener('pointercancel',()=>{painting=false;lastPaint=null;});
+
+  $('btnNew').addEventListener('click',()=>{fileInput.value='';fileInput.click();});
+
+  function roundRect(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath();}
+
+  async function exportPNG(){
+    const fullSrc=offscreen(fullW,fullH);fullSrc.getContext('2d').drawImage(fullImg,0,0,fullW,fullH);
+    let fullMask=null;
+    if(autoBackgroundMask){fullMask=buildEffectiveBackgroundMask(fullW,fullH);}
+    const out=composeProcessed(fullSrc,fullW,fullH,fullMask),octx=out.getContext('2d');
+    if($('copyrightOn').checked){const pad=Math.max(18,Math.round(fullW*.014)),fontSize=Math.max(16,Math.round(fullW*.018));octx.save();octx.font=`600 ${fontSize}px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif`;const text='(C) SQUARE ENIX',tw=octx.measureText(text).width,bw=tw+fontSize*1.15,bh=fontSize*1.9,x=fullW-pad,y=fullH-pad;octx.fillStyle='rgba(0,0,0,.34)';roundRect(octx,x-bw,y-bh,bw,bh,fontSize*.52);octx.fill();octx.textAlign='right';octx.textBaseline='bottom';octx.fillStyle='rgba(255,255,255,.97)';octx.fillText(text,x-fontSize*.46,y-fontSize*.36);octx.restore();}
+    return new Promise(resolve=>out.toBlob(resolve,'image/png'));
+  }
+
+
+  window.addEventListener('error',e=>{
+    console.error(e.error||e.message);
+    if(!fullImg) setStatus('JavaScriptエラー: '+(e.message||'不明なエラー'));
+  });
+
+  $('btnSave').addEventListener('click',async()=>{if(!fullImg)return;$('btnSave').disabled=true;const prev=$('btnSave').textContent;$('btnSave').textContent='書き出し中…';try{if($('blurOn').checked&&!autoBackgroundMask&&!segLoading)await computeAutoBackgroundMask();const blob=await exportPNG();const a=document.createElement('a'),url=URL.createObjectURL(blob);a.href=url;a.download='ff14_photo_studio.png';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1200);}finally{$('btnSave').disabled=false;$('btnSave').textContent=prev;}});
+})();
+</script>
+</body>
+</html>
