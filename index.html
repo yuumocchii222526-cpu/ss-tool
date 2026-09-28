@@ -152,6 +152,14 @@ select{width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--bo
   let paintRadius=20;
 
   const WORK_MAX=1600;
+  const PREVIEW_MAX_SIDE=1120;
+
+  let previewSourceCache=null;
+  let maskRevision=0;
+  const effectiveMaskCache=new Map();
+  let renderScheduled=false;
+  let pendingRenderMode='full';
+  let settleRenderTimer=0;
 
   const FILTER_PRESETS={
     glow:{bright:110,sat:106,contrast:108,warmth:8,glow:24,subjectPop:16},
@@ -171,6 +179,36 @@ select{width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--bo
     else if(segError){segDot.classList.add('error');segStatus.textContent='人物判定に失敗';}
     else if(autoBackgroundMask){segStatus.textContent='人物判定完了';}
     else {segDot.classList.add('loading');segStatus.textContent='人物判定の準備中';}
+  }
+
+  function invalidatePreviewCache(){
+    previewSourceCache=null;
+  }
+
+  function bumpMaskRevision(){
+    maskRevision++;
+    effectiveMaskCache.clear();
+  }
+
+  function getPreviewSize(){
+    const maxSide=Math.max(workW,workH);
+    if(!maxSide || maxSide<=PREVIEW_MAX_SIDE) return {w:workW,h:workH,scale:1};
+    const scale=PREVIEW_MAX_SIDE/maxSide;
+    return {w:Math.max(1,Math.round(workW*scale)),h:Math.max(1,Math.round(workH*scale)),scale};
+  }
+
+  function getPreviewSource(){
+    const size=getPreviewSize();
+    if(size.scale===1) return {canvas:srcCanvas,w:workW,h:workH};
+    if(!previewSourceCache || previewSourceCache.w!==size.w || previewSourceCache.h!==size.h){
+      const c=offscreen(size.w,size.h);
+      const cctx=c.getContext('2d');
+      cctx.imageSmoothingEnabled=true;
+      if('imageSmoothingQuality' in cctx) cctx.imageSmoothingQuality='medium';
+      cctx.drawImage(srcCanvas,0,0,workW,workH,0,0,size.w,size.h);
+      previewSourceCache={canvas:c,w:size.w,h:size.h};
+    }
+    return previewSourceCache;
   }
 
   async function decodeFile(file){
@@ -228,6 +266,7 @@ select{width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--bo
       restoreSharpMask=offscreen(workW,workH);
       maskPaintCanvas.width=workW;maskPaintCanvas.height=workH;
       maskPaintCtx.clearRect(0,0,workW,workH);
+      bumpMaskRevision();
     }catch(err){
       console.error(err);segError=String(err?.message||err);autoBackgroundMask=null;
     }finally{segLoading=false;updateSegUI();render();}
@@ -306,6 +345,8 @@ select{width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--bo
 
   function buildEffectiveBackgroundMask(w,h){
     if(!autoBackgroundMask && !addBlurMask) return null;
+    const cacheKey=`${maskRevision}:${w}x${h}`;
+    if(effectiveMaskCache.has(cacheKey)) return effectiveMaskCache.get(cacheKey);
     const out=offscreen(w,h), octx=out.getContext('2d');
     if(autoBackgroundMask) octx.drawImage(autoBackgroundMask,0,0,workW,workH,0,0,w,h);
     if(addBlurMask) octx.drawImage(addBlurMask,0,0,workW,workH,0,0,w,h);
@@ -314,7 +355,9 @@ select{width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--bo
       octx.drawImage(restoreSharpMask,0,0,workW,workH,0,0,w,h);
       octx.globalCompositeOperation='source-over';
     }
-    return buildProtectedBackgroundMask(out,w,h);
+    const refined=buildProtectedBackgroundMask(out,w,h);
+    effectiveMaskCache.set(cacheKey,refined);
+    return refined;
   }
 
 
@@ -443,14 +486,43 @@ select{width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--bo
     return out;
   }
 
-  function render(){
-    if(!srcCanvas)return;
+  function render(mode='full'){
+    if(!srcCanvas) return;
+    const usePreview=mode==='preview';
     ctx.clearRect(0,0,workW,workH);
-    if(!showAfter){ctx.drawImage(srcCanvas,0,0);return;}
-    const effective=buildEffectiveBackgroundMask(workW,workH);const out=composeProcessed(srcCanvas,workW,workH,effective);ctx.drawImage(out,0,0);
+    ctx.imageSmoothingEnabled=true;
+    if('imageSmoothingQuality' in ctx) ctx.imageSmoothingQuality=usePreview?'medium':'high';
+    if(!showAfter){
+      ctx.drawImage(srcCanvas,0,0);
+      return;
+    }
+    const sourceInfo=usePreview ? getPreviewSource() : {canvas:srcCanvas,w:workW,h:workH};
+    const effective=buildEffectiveBackgroundMask(sourceInfo.w,sourceInfo.h);
+    const out=composeProcessed(sourceInfo.canvas,sourceInfo.w,sourceInfo.h,effective);
+    if(usePreview && (sourceInfo.w!==workW || sourceInfo.h!==workH)) ctx.drawImage(out,0,0,sourceInfo.w,sourceInfo.h,0,0,workW,workH);
+    else ctx.drawImage(out,0,0);
   }
 
-  function applyPreset(name){currentPreset=name;const p=PRESETS[name];Object.keys(p).forEach(k=>{$(k).value=p[k];$(k+'Out').textContent=p[k];});document.querySelectorAll('#presetWrap button').forEach(b=>b.classList.toggle('active',b.dataset.preset===name));render();}
+  function requestRender(mode='full'){
+    if(mode==='full') pendingRenderMode='full';
+    else if(pendingRenderMode!=='full') pendingRenderMode='preview';
+    if(renderScheduled) return;
+    renderScheduled=true;
+    requestAnimationFrame(()=>{
+      renderScheduled=false;
+      const nextMode=pendingRenderMode;
+      pendingRenderMode='full';
+      render(nextMode);
+    });
+  }
+
+  function requestInteractiveRender(){
+    requestRender('preview');
+    clearTimeout(settleRenderTimer);
+    settleRenderTimer=setTimeout(()=>requestRender('full'),120);
+  }
+
+  function applyPreset(name){currentPreset=name;const p=PRESETS[name];Object.keys(p).forEach(k=>{$(k).value=p[k];$(k+'Out').textContent=p[k];});document.querySelectorAll('#presetWrap button').forEach(b=>b.classList.toggle('active',b.dataset.preset===name));requestRender('full');}
   document.querySelectorAll('#presetWrap button').forEach(btn=>btn.addEventListener('click',()=>applyPreset(btn.dataset.preset)));
   applyPreset('glow');
 
@@ -465,6 +537,9 @@ select{width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--bo
       canvas.width=workW;canvas.height=workH;
       maskPaintCanvas.width=workW;maskPaintCanvas.height=workH;
       maskPaintCtx.clearRect(0,0,workW,workH);
+      invalidatePreviewCache();
+      effectiveMaskCache.clear();
+      maskRevision=0;
       addBlurMask=null;
       restoreSharpMask=null;
       painting=false;
@@ -476,14 +551,17 @@ select{width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--bo
     }catch(err){setStatus('読み込み失敗\n'+(err&&err.message?err.message:String(err))+'\n\nHEICの場合はJPEG/PNGで試してください。');}
   });
 
-  $('btnBefore').addEventListener('click',()=>{showAfter=false;$('btnBefore').classList.add('active');$('btnAfter').classList.remove('active');render();});
-  $('btnAfter').addEventListener('click',()=>{showAfter=true;$('btnAfter').classList.add('active');$('btnBefore').classList.remove('active');render();});
-  $('blurOn').addEventListener('change',render);
-  sliderIds.forEach(id=>$(id).addEventListener('input',render));
+  $('btnBefore').addEventListener('click',()=>{showAfter=false;$('btnBefore').classList.add('active');$('btnAfter').classList.remove('active');requestRender('full');});
+  $('btnAfter').addEventListener('click',()=>{showAfter=true;$('btnAfter').classList.add('active');$('btnBefore').classList.remove('active');requestRender('full');});
+  $('blurOn').addEventListener('change',()=>requestRender('full'));
+  sliderIds.forEach(id=>{
+    $(id).addEventListener('input',requestInteractiveRender);
+    $(id).addEventListener('change',()=>requestRender('full'));
+  });
   $('correctionOn').addEventListener('change',()=>{canvasWrap.classList.toggle('is-correcting',$('correctionOn').checked);if(!$('correctionOn').checked){painting=false;lastPaint=null;paintRect=null;maskPaintCtx.clearRect(0,0,workW,workH);}});
   $('restoreBtn').addEventListener('click',()=>{correctionMode='restore';$('restoreBtn').classList.add('active');$('addBlurBtn').classList.remove('active');});
   $('addBlurBtn').addEventListener('click',()=>{correctionMode='add';$('addBlurBtn').classList.add('active');$('restoreBtn').classList.remove('active');});
-  $('clearCorrection').addEventListener('click',()=>{if(addBlurMask)addBlurMask.getContext('2d').clearRect(0,0,workW,workH);if(restoreSharpMask)restoreSharpMask.getContext('2d').clearRect(0,0,workW,workH);maskPaintCtx.clearRect(0,0,workW,workH);render();});
+  $('clearCorrection').addEventListener('click',()=>{if(addBlurMask)addBlurMask.getContext('2d').clearRect(0,0,workW,workH);if(restoreSharpMask)restoreSharpMask.getContext('2d').clearRect(0,0,workW,workH);maskPaintCtx.clearRect(0,0,workW,workH);bumpMaskRevision();requestRender('full');});
 
   // 補正ブラシ軽量化：ドラッグ中は重い画像再処理を行わず、
   // マスクと軽いブラシ軌跡だけ更新。加工結果は指を離した時に1回だけ再描画する。
@@ -549,7 +627,8 @@ select{width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--bo
     lastPaint=null;
     paintRect=null;
     maskPaintCtx.clearRect(0,0,workW,workH);
-    render();
+    bumpMaskRevision();
+    requestInteractiveRender();
   }
 
   maskPaintCanvas.addEventListener('pointerdown',e=>{
