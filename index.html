@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#17171b">
-<title>FF14 Photo Studio Filter</title>
+<title>FF14 Photo Studio Filter v2</title>
 <style>
-:root{--bg:#17171b;--panel:#1f2024;--panel2:#26272c;--accent:#c9a869;--text:#ebe6dc;--dim:#a39f95;--border:#34343b;--danger:#b86d6d}
+:root{--bg:#17171b;--panel:#1f2024;--panel2:#26272c;--accent:#c9a869;--text:#ebe6dc;--dim:#a39f95;--border:#34343b}
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif}
 body{min-height:100vh}
@@ -14,13 +14,12 @@ body{min-height:100vh}
 header{padding:18px 16px 8px}
 h1{margin:0;font-size:23px;color:var(--accent);font-family:Georgia,serif}
 .sub{margin:4px 0 0;color:var(--dim);font-size:13px;line-height:1.55}
-.layout{display:grid;grid-template-columns:minmax(320px,1fr) 330px;gap:18px;padding:8px 16px 0}
+.layout{display:grid;grid-template-columns:minmax(320px,1fr) 340px;gap:18px;padding:8px 16px 0}
 @media (max-width:900px){.layout{grid-template-columns:1fr}}
 .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px}
 .stage-empty{text-align:center;padding:28px 16px}
 .file-label,.btn{display:inline-block;width:100%;padding:12px 14px;border-radius:10px;background:var(--accent);color:#181818;font-weight:700;text-align:center;border:none;font-size:15px;cursor:pointer}
 .btn.secondary{background:var(--panel2);color:var(--text);border:1px solid var(--border)}
-.btn.ghost{background:transparent;color:var(--dim);border:1px solid var(--border)}
 .fileInput{display:none}
 .status{margin-top:12px;color:var(--dim);font-size:12px;white-space:pre-wrap;line-height:1.5}
 .canvas-wrap{display:none;position:relative}
@@ -30,20 +29,17 @@ h1{margin:0;font-size:23px;color:var(--accent);font-family:Georgia,serif}
 .group{padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--panel);margin-bottom:12px}
 .group h2{margin:0 0 10px;font-size:12px;color:var(--dim);letter-spacing:.04em}
 .row{display:flex;align-items:center;gap:10px;margin:10px 0;font-size:13px}
-.row span{width:94px;flex:0 0 auto}
-.row output{width:40px;text-align:right;color:var(--dim);font-size:12px}
+.row span{width:96px;flex:0 0 auto}
+.row output{width:42px;text-align:right;color:var(--dim);font-size:12px}
 input[type=range]{flex:1;accent-color:var(--accent)}
 .toggle,.presets{display:grid;gap:8px}
 .toggle{grid-template-columns:1fr 1fr}
 .presets{grid-template-columns:1fr 1fr}
-.toggle button,.presets button{padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--panel2);color:var(--text);font-size:13px;cursor:pointer}
+.toggle button,.presets button,.small-btn{padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--panel2);color:var(--text);font-size:13px;cursor:pointer}
 .toggle button.active,.presets button.active{background:var(--accent);color:#191919;border-color:var(--accent)}
 .mini{font-size:12px;color:var(--dim);line-height:1.55;margin:0 0 10px}
-hr.sep{border:none;border-top:1px solid var(--border);margin:12px 0}
-.inline{display:flex;gap:8px}
-.inline>*{flex:1}
+.inline{display:flex;gap:8px}.inline>*{flex:1}
 .check{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);margin-top:8px}
-.small-btn{padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--panel2);color:var(--text);font-size:13px;cursor:pointer}
 .footer-note{padding:0 16px;margin-top:10px;color:var(--dim);font-size:12px;line-height:1.6}
 </style>
 </head>
@@ -51,16 +47,15 @@ hr.sep{border:none;border-top:1px solid var(--border);margin:12px 0}
 <div class="app">
   <header>
     <h1>FF14 Photo Studio</h1>
-    <p class="sub">背景ぼかし＋GShade風フィルタ版。人物を指でなぞって「くっきり残す範囲」を塗ると、背景だけをぼかせます。保存はPNG、右下に (C) SQUARE ENIX を入れられます。</p>
+    <p class="sub">背景ぼかし＋玉ボケ＋GShade風フィルタ版。人物・髪・服を指で塗ると、その部分だけくっきり残します。PNG保存時に (C) SQUARE ENIX を入れられます。</p>
   </header>
 
   <div class="layout">
     <section>
       <div class="card stage-empty" id="pickerCard">
         <label class="file-label" for="fileInput">画像を選ぶ</label>
-        <div class="status" id="status">JPEG / PNG / HEIC 読み込み対応（HEIC は環境により読み込めない場合あり）</div>
+        <div class="status" id="status">JPEG / PNG / HEIC 読み込み対応（HEIC は環境により読めない場合あり）</div>
       </div>
-
       <div class="canvas-wrap" id="canvasWrap">
         <canvas id="canvas"></canvas>
         <div class="mask-pill" id="maskHint">塗るモード：人物をなぞる</div>
@@ -78,16 +73,18 @@ hr.sep{border:none;border-top:1px solid var(--border);margin:12px 0}
 
       <div class="group">
         <h2>背景ぼかし</h2>
-        <p class="mini">人物・服・髪の上を指で塗ると、その部分だけシャープに残ります。</p>
+        <p class="mini">人物の上を指で塗ると、その部分だけはっきり残ります。背景はぼかし＋玉ボケになります。</p>
         <div class="toggle">
           <button id="btnPaint" class="active">塗る</button>
           <button id="btnErase">消す</button>
         </div>
         <div class="row"><span>ブラシ</span><input id="brush" type="range" min="12" max="140" value="44"><output id="brushOut">44</output></div>
-        <div class="row"><span>ぼかし</span><input id="bgBlur" type="range" min="0" max="28" value="12"><output id="bgBlurOut">12</output></div>
-        <div class="row"><span>境界ぼかし</span><input id="edgeSoft" type="range" min="0" max="18" value="6"><output id="edgeSoftOut">6</output></div>
+        <div class="row"><span>背景ぼかし</span><input id="bgBlur" type="range" min="0" max="36" value="20"><output id="bgBlurOut">20</output></div>
+        <div class="row"><span>玉ボケ量</span><input id="bokeh" type="range" min="0" max="40" value="24"><output id="bokehOut">24</output></div>
+        <div class="row"><span>玉ボケ大きさ</span><input id="bokehSize" type="range" min="10" max="40" value="24"><output id="bokehSizeOut">24</output></div>
+        <div class="row"><span>境界なじみ</span><input id="edgeSoft" type="range" min="0" max="18" value="7"><output id="edgeSoftOut">7</output></div>
         <div class="inline">
-          <button class="small-btn" id="btnFillMask">全身保護</button>
+          <button class="small-btn" id="btnFillMask">中央を保護</button>
           <button class="small-btn" id="btnClearMask">塗りを消す</button>
         </div>
       </div>
@@ -95,16 +92,17 @@ hr.sep{border:none;border-top:1px solid var(--border);margin:12px 0}
       <div class="group">
         <h2>GShade風フィルタ</h2>
         <div class="presets" id="presetWrap">
-          <button data-preset="softBloom" class="active">ふんわり</button>
-          <button data-preset="flowerLight">花園</button>
+          <button data-preset="flowerLight" class="active">花園</button>
+          <button data-preset="softBloom">ふんわり</button>
           <button data-preset="clearCute">クリア</button>
           <button data-preset="paleDream">淡め</button>
         </div>
-        <div class="row"><span>明るさ</span><input id="bright" type="range" min="70" max="140" value="106"><output id="brightOut">106</output></div>
-        <div class="row"><span>彩度</span><input id="sat" type="range" min="40" max="180" value="95"><output id="satOut">95</output></div>
+        <div class="row"><span>明るさ</span><input id="bright" type="range" min="70" max="145" value="112"><output id="brightOut">112</output></div>
+        <div class="row"><span>彩度</span><input id="sat" type="range" min="40" max="180" value="102"><output id="satOut">102</output></div>
         <div class="row"><span>コントラスト</span><input id="contrast" type="range" min="70" max="150" value="96"><output id="contrastOut">96</output></div>
-        <div class="row"><span>暖かさ</span><input id="warmth" type="range" min="-30" max="30" value="8"><output id="warmthOut">8</output></div>
-        <div class="row"><span>ふんわり光</span><input id="glow" type="range" min="0" max="40" value="18"><output id="glowOut">18</output></div>
+        <div class="row"><span>暖かさ</span><input id="warmth" type="range" min="-30" max="30" value="14"><output id="warmthOut">14</output></div>
+        <div class="row"><span>ふんわり光</span><input id="glow" type="range" min="0" max="45" value="24"><output id="glowOut">24</output></div>
+        <div class="row"><span>人物くっきり</span><input id="clarity" type="range" min="0" max="100" value="42"><output id="clarityOut">42</output></div>
       </div>
 
       <div class="group">
@@ -117,7 +115,7 @@ hr.sep{border:none;border-top:1px solid var(--border);margin:12px 0}
   </div>
 
   <input type="file" id="fileInput" class="fileInput" accept="image/*,.heic,.heif">
-  <p class="footer-note">※ ブラウザ内で処理します。自動人物認識は使わず、背景ぼかしは手動マスク方式です。</p>
+  <p class="footer-note">※ ブラウザ内で処理します。重くなったら玉ボケ量やぼかしを少し下げてください。</p>
 </div>
 
 <script>
@@ -127,25 +125,28 @@ hr.sep{border:none;border-top:1px solid var(--border);margin:12px 0}
   const panel = $('panel'), canvasWrap = $('canvasWrap'), canvas = $('canvas'), ctx = canvas.getContext('2d');
   const maskHint = $('maskHint');
 
-  const sliders = ['brush','bgBlur','edgeSoft','bright','sat','contrast','warmth','glow'];
-  sliders.forEach(id => { const el=$(id), out=$(id+'Out'); if(out){ out.textContent = el.value; el.addEventListener('input',()=> out.textContent = el.value); }});
+  const sliderIds = ['brush','bgBlur','bokeh','bokehSize','edgeSoft','bright','sat','contrast','warmth','glow','clarity'];
+  sliderIds.forEach(id => { const el=$(id), out=$(id+'Out'); if(out){ out.textContent = el.value; el.addEventListener('input',()=> out.textContent = el.value); }});
 
   let fullImg = null, fullW = 0, fullH = 0;
   let workW = 0, workH = 0, workScale = 1;
-  let srcCanvas = null, blurCanvas = null, sharpCanvas = null, maskCanvas = null;
+  let srcCanvas = null, maskCanvas = null;
+  let cachedBg = null, cachedFg = null, cachedBokeh = null;
   let showAfter = true, drawMode = 'paint', drawing = false, lastPt = null;
-  let currentPreset = 'softBloom';
+  let currentPreset = 'flowerLight';
   const WORK_MAX = 1400;
 
   const PRESETS = {
-    softBloom: {bright:106,sat:95,contrast:96,warmth:8,glow:18,bgBlur:12,edgeSoft:6},
-    flowerLight:{bright:112,sat:102,contrast:94,warmth:14,glow:24,bgBlur:13,edgeSoft:7},
-    clearCute: {bright:104,sat:108,contrast:101,warmth:4,glow:10,bgBlur:10,edgeSoft:5},
-    paleDream: {bright:116,sat:78,contrast:88,warmth:10,glow:22,bgBlur:12,edgeSoft:7}
+    flowerLight:{bright:112,sat:102,contrast:96,warmth:14,glow:24,clarity:42,bgBlur:20,bokeh:24,bokehSize:24,edgeSoft:7},
+    softBloom: {bright:108,sat:94,contrast:93,warmth:10,glow:28,clarity:34,bgBlur:18,bokeh:18,bokehSize:20,edgeSoft:7},
+    clearCute: {bright:104,sat:112,contrast:104,warmth:6,glow:11,clarity:58,bgBlur:15,bokeh:10,bokehSize:18,edgeSoft:5},
+    paleDream: {bright:118,sat:78,contrast:88,warmth:11,glow:30,clarity:28,bgBlur:20,bokeh:22,bokehSize:26,edgeSoft:8}
   };
 
   function setStatus(msg){ status.textContent = msg; }
-  function offscreen(w,h){ const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+  function offscreen(w,h){ const c=document.createElement('canvas'); c.width=w; c.height=h; return c; }
+  function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+  function rand(x,y){ const s=Math.sin(x*12.9898+y*78.233)*43758.5453123; return s-Math.floor(s); }
 
   async function decodeFile(file){
     if ('createImageBitmap' in window) {
@@ -164,6 +165,220 @@ hr.sep{border:none;border-top:1px solid var(--border);margin:12px 0}
     });
   }
 
+  function values(){
+    return {
+      bright:+$('bright').value/100,
+      sat:+$('sat').value/100,
+      contrast:+$('contrast').value/100,
+      warmth:+$('warmth').value,
+      glow:+$('glow').value,
+      clarity:+$('clarity').value,
+      bgBlur:+$('bgBlur').value,
+      bokeh:+$('bokeh').value,
+      bokehSize:+$('bokehSize').value,
+      edgeSoft:+$('edgeSoft').value
+    };
+  }
+
+  function drawBaseAdjusted(target, src, w, h, v, blurPx){
+    const cctx = target.getContext('2d');
+    cctx.clearRect(0,0,w,h);
+    cctx.filter = `brightness(${v.bright}) saturate(${v.sat}) contrast(${v.contrast}) blur(${blurPx}px)`;
+    cctx.drawImage(src,0,0,w,h);
+    cctx.filter = 'none';
+
+    if(v.warmth !== 0){
+      const warm = Math.max(0, v.warmth), cool = Math.max(0, -v.warmth);
+      if(warm){
+        cctx.globalCompositeOperation='soft-light';
+        cctx.fillStyle=`rgba(255,186,130,${warm/110})`;
+        cctx.fillRect(0,0,w,h);
+      }
+      if(cool){
+        cctx.globalCompositeOperation='soft-light';
+        cctx.fillStyle=`rgba(120,188,255,${cool/120})`;
+        cctx.fillRect(0,0,w,h);
+      }
+      cctx.globalCompositeOperation='source-over';
+    }
+
+    if(currentPreset === 'flowerLight'){
+      cctx.globalCompositeOperation='soft-light';
+      const g = cctx.createLinearGradient(0,0,w,h);
+      g.addColorStop(0,'rgba(255,214,214,0.14)');
+      g.addColorStop(1,'rgba(255,240,200,0.13)');
+      cctx.fillStyle=g; cctx.fillRect(0,0,w,h);
+      cctx.globalCompositeOperation='source-over';
+    } else if(currentPreset === 'softBloom'){
+      cctx.globalCompositeOperation='screen';
+      cctx.fillStyle='rgba(255,245,240,0.09)';
+      cctx.fillRect(0,0,w,h);
+      cctx.globalCompositeOperation='source-over';
+    } else if(currentPreset === 'paleDream'){
+      cctx.globalCompositeOperation='screen';
+      cctx.fillStyle='rgba(255,255,255,0.16)';
+      cctx.fillRect(0,0,w,h);
+      cctx.globalCompositeOperation='source-over';
+    }
+
+    if(v.glow > 0){
+      const glow = offscreen(w,h), gctx = glow.getContext('2d');
+      gctx.filter = `blur(${Math.max(2, v.glow*0.7)}px)`;
+      gctx.drawImage(target,0,0);
+      cctx.globalCompositeOperation='screen';
+      cctx.globalAlpha=Math.min(0.55, v.glow/80);
+      cctx.drawImage(glow,0,0);
+      cctx.globalAlpha=1;
+      cctx.globalCompositeOperation='source-over';
+    }
+  }
+
+  function sharpenCanvas(src, amount){
+    if(amount <= 0) return src;
+    const w = src.width, h = src.height;
+    const out = offscreen(w,h);
+    const sctx = src.getContext('2d');
+    const octx = out.getContext('2d');
+    const srcImg = sctx.getImageData(0,0,w,h);
+    const dstImg = octx.createImageData(w,h);
+    const d = srcImg.data, outD = dstImg.data;
+    const t = clamp(amount/100,0,1) * 0.9;
+    for(let y=0;y<h;y++){
+      for(let x=0;x<w;x++){
+        const i=(y*w+x)*4;
+        const xm1=Math.max(0,x-1), xp1=Math.min(w-1,x+1), ym1=Math.max(0,y-1), yp1=Math.min(h-1,y+1);
+        const idxL=(y*w+xm1)*4, idxR=(y*w+xp1)*4, idxU=(ym1*w+x)*4, idxD=(yp1*w+x)*4;
+        for(let c=0;c<3;c++){
+          const center=d[i+c];
+          const sharp = center*5 - d[idxL+c] - d[idxR+c] - d[idxU+c] - d[idxD+c];
+          outD[i+c] = clamp(center*(1-t) + sharp*t, 0, 255);
+        }
+        outD[i+3] = d[i+3];
+      }
+    }
+    octx.putImageData(dstImg,0,0);
+    return out;
+  }
+
+  function generateBokeh(source, w, h, v){
+    const out = offscreen(w,h), octx = out.getContext('2d');
+    if(v.bokeh <= 0) return out;
+    const sampleW = Math.max(56, Math.round(w/14)), sampleH = Math.max(56, Math.round(h/14));
+    const sample = offscreen(sampleW, sampleH), sctx = sample.getContext('2d');
+    sctx.drawImage(source,0,0,sampleW,sampleH);
+    const data = sctx.getImageData(0,0,sampleW,sampleH).data;
+    const spacing = Math.max(24, Math.round(v.bokehSize * 2.15));
+    const baseR = Math.max(10, v.bokehSize * 1.25);
+    octx.globalCompositeOperation='screen';
+
+    for(let y = spacing/2; y < h; y += spacing){
+      for(let x = spacing/2; x < w; x += spacing){
+        const rx = x + (rand(x,y)-0.5)*spacing*0.8;
+        const ry = y + (rand(y,x)-0.5)*spacing*0.8;
+        const sx = clamp(Math.floor(rx / w * sampleW), 0, sampleW-1);
+        const sy = clamp(Math.floor(ry / h * sampleH), 0, sampleH-1);
+        const i = (sy * sampleW + sx) * 4;
+        const r = data[i], g = data[i+1], b = data[i+2];
+        const lum = 0.2126*r + 0.7152*g + 0.0722*b;
+        const chance = rand(rx*0.71, ry*0.53);
+        if(lum < 145 || chance > (v.bokeh/48 + Math.max(0, lum-145)/240)) continue;
+
+        const alpha = clamp(((lum-135)/120) * (v.bokeh/40) * 0.65, 0.05, 0.48);
+        const radius = baseR * (0.65 + lum/255 * 0.9) * (0.9 + rand(rx,ry)*0.4);
+        const grad = octx.createRadialGradient(rx,ry,0,rx,ry,radius);
+        grad.addColorStop(0, `rgba(255,255,255,${alpha*0.95})`);
+        grad.addColorStop(0.18, `rgba(${r},${g},${b},${alpha})`);
+        grad.addColorStop(0.72, `rgba(${r},${g},${b},${alpha*0.45})`);
+        grad.addColorStop(1, 'rgba(255,255,255,0)');
+        octx.fillStyle = grad;
+        octx.beginPath();
+        octx.arc(rx,ry,radius,0,Math.PI*2);
+        octx.fill();
+      }
+    }
+    octx.globalCompositeOperation='source-over';
+    return out;
+  }
+
+  function softMask(mask, w, h, edge){
+    const c = offscreen(w,h), cctx = c.getContext('2d');
+    if(edge > 0){ cctx.filter = `blur(${edge}px)`; }
+    cctx.drawImage(mask,0,0,w,h);
+    cctx.filter='none';
+    return c;
+  }
+
+  function inverseMask(mask, w, h){
+    const inv = offscreen(w,h), ictx = inv.getContext('2d');
+    ictx.fillStyle='#fff'; ictx.fillRect(0,0,w,h);
+    ictx.globalCompositeOperation='destination-out';
+    ictx.drawImage(mask,0,0,w,h);
+    ictx.globalCompositeOperation='source-over';
+    return inv;
+  }
+
+  function clipDraw(targetCtx, image, clipMask, w, h){
+    const temp = offscreen(w,h), tctx=temp.getContext('2d');
+    tctx.drawImage(image,0,0,w,h);
+    tctx.globalCompositeOperation='destination-in';
+    tctx.drawImage(clipMask,0,0,w,h);
+    tctx.globalCompositeOperation='source-over';
+    targetCtx.drawImage(temp,0,0);
+  }
+
+  function recomputeLayers(baseSrc, w, h){
+    const v = values();
+    cachedBg = offscreen(w,h);
+    drawBaseAdjusted(cachedBg, baseSrc, w, h, v, v.bgBlur);
+
+    const fgBase = offscreen(w,h);
+    drawBaseAdjusted(fgBase, baseSrc, w, h, v, 0);
+    cachedFg = sharpenCanvas(fgBase, v.clarity);
+
+    cachedBokeh = generateBokeh(cachedBg, w, h, v);
+  }
+
+  function compositePreview(targetCtx, w, h){
+    if(!cachedBg || !cachedFg || !maskCanvas) return;
+    const m = softMask(maskCanvas, w, h, values().edgeSoft);
+    const inv = inverseMask(m, w, h);
+    targetCtx.clearRect(0,0,w,h);
+    targetCtx.drawImage(cachedBg,0,0,w,h);
+    clipDraw(targetCtx, cachedBokeh, inv, w, h);
+    clipDraw(targetCtx, cachedFg, m, w, h);
+  }
+
+  function render(){
+    if(!srcCanvas) return;
+    if(showAfter){
+      compositePreview(ctx, workW, workH);
+      drawMaskOverlay();
+    } else {
+      ctx.clearRect(0,0,workW,workH);
+      ctx.drawImage(srcCanvas,0,0);
+    }
+  }
+
+  function drawMaskOverlay(){
+    if(!maskCanvas || !showAfter) return;
+    ctx.save();
+    ctx.globalAlpha = 0.12;
+    ctx.drawImage(maskCanvas,0,0,workW,workH);
+    ctx.globalCompositeOperation = 'source-atop';
+    ctx.fillStyle = 'rgba(255,220,160,0.26)';
+    ctx.fillRect(0,0,workW,workH);
+    ctx.restore();
+  }
+
+  function applyPreset(name){
+    currentPreset = name;
+    const p = PRESETS[name];
+    Object.keys(p).forEach(k => { $(k).value = p[k]; const out=$(k+'Out'); if(out) out.textContent = p[k]; });
+    document.querySelectorAll('#presetWrap button').forEach(b => b.classList.toggle('active', b.dataset.preset === name));
+    if(srcCanvas){ recomputeLayers(srcCanvas, workW, workH); render(); }
+  }
+  document.querySelectorAll('#presetWrap button').forEach(btn => btn.addEventListener('click', ()=> applyPreset(btn.dataset.preset)));
+
   fileInput.addEventListener('change', async ()=>{
     const file = fileInput.files && fileInput.files[0];
     if(!file) return;
@@ -178,168 +393,28 @@ hr.sep{border:none;border-top:1px solid var(--border);margin:12px 0}
       workScale = Math.min(1, WORK_MAX / Math.max(fullW, fullH));
       workW = Math.max(1, Math.round(fullW * workScale));
       workH = Math.max(1, Math.round(fullH * workScale));
-
       srcCanvas = offscreen(workW, workH);
-      srcCanvas.getContext('2d').drawImage(fullImg, 0, 0, workW, workH);
-      blurCanvas = offscreen(workW, workH);
-      sharpCanvas = offscreen(workW, workH);
+      srcCanvas.getContext('2d').drawImage(fullImg,0,0,workW,workH);
       maskCanvas = offscreen(workW, workH);
-
-      // 初期状態: 中央に大きめの楕円で人物領域を仮保護
       const mctx = maskCanvas.getContext('2d');
-      mctx.fillStyle = '#fff';
-      mctx.filter = 'blur(20px)';
-      mctx.beginPath();
-      mctx.ellipse(workW*0.5, workH*0.52, workW*0.18, workH*0.28, 0, 0, Math.PI*2);
-      mctx.fill();
-      mctx.filter = 'none';
+      mctx.fillStyle='#fff'; mctx.filter='blur(16px)';
+      mctx.beginPath(); mctx.ellipse(workW*0.5, workH*0.52, workW*0.20, workH*0.30, 0, 0, Math.PI*2); mctx.fill();
+      mctx.filter='none';
 
       canvas.width = workW; canvas.height = workH;
-      pickerCard.style.display = 'none';
-      canvasWrap.style.display = 'block';
-      panel.style.display = 'block';
-      renderAll();
+      pickerCard.style.display='none'; canvasWrap.style.display='block'; panel.style.display='block';
+      applyPreset(currentPreset);
+      render();
     }catch(err){
       setStatus('読み込み失敗\n' + (err && err.message ? err.message : String(err)) + '\n\nHEICの場合は、iPhoneのスクリーンショット画像やJPEG/PNGで試してください。');
     }
   });
 
-  function applyPreset(name){
-    currentPreset = name;
-    const p = PRESETS[name];
-    if(!p) return;
-    ['bright','sat','contrast','warmth','glow','bgBlur','edgeSoft'].forEach(k => { $(k).value = p[k]; $(k+'Out').textContent = p[k]; });
-    document.querySelectorAll('#presetWrap button').forEach(b => b.classList.toggle('active', b.dataset.preset === name));
-    renderAll();
-  }
-  document.querySelectorAll('#presetWrap button').forEach(btn=> btn.addEventListener('click',()=>applyPreset(btn.dataset.preset)));
-
-  function getFilterValues(){
-    return {
-      bright: +$('bright').value / 100,
-      sat: +$('sat').value / 100,
-      contrast: +$('contrast').value / 100,
-      warmth: +$('warmth').value,
-      glow: +$('glow').value,
-      bgBlur: +$('bgBlur').value,
-      edgeSoft: +$('edgeSoft').value
-    };
-  }
-
-  function makeTintedVersion(src, w, h, values, blurPx=0){
-    const c = offscreen(w,h), cctx = c.getContext('2d');
-    cctx.filter = `brightness(${values.bright}) saturate(${values.sat}) contrast(${values.contrast}) blur(${blurPx}px)`;
-    cctx.drawImage(src,0,0,w,h);
-    cctx.filter = 'none';
-
-    // 暖かさ
-    if(values.warmth !== 0){
-      const warm = Math.max(0, values.warmth);
-      const cool = Math.max(0, -values.warmth);
-      if(warm){
-        cctx.globalCompositeOperation = 'soft-light';
-        cctx.fillStyle = `rgba(255, 186, 130, ${warm/110})`;
-        cctx.fillRect(0,0,w,h);
-      }
-      if(cool){
-        cctx.globalCompositeOperation = 'soft-light';
-        cctx.fillStyle = `rgba(120, 188, 255, ${cool/120})`;
-        cctx.fillRect(0,0,w,h);
-      }
-      cctx.globalCompositeOperation = 'source-over';
-    }
-
-    // プリセットごとの柔らかい色味
-    if(currentPreset === 'softBloom'){
-      cctx.globalCompositeOperation = 'screen';
-      cctx.fillStyle = 'rgba(255,245,240,0.08)';
-      cctx.fillRect(0,0,w,h);
-      cctx.globalCompositeOperation = 'source-over';
-    } else if(currentPreset === 'flowerLight'){
-      cctx.globalCompositeOperation = 'soft-light';
-      const g = cctx.createLinearGradient(0,0,w,h);
-      g.addColorStop(0,'rgba(255,210,210,0.12)');
-      g.addColorStop(1,'rgba(255,238,200,0.12)');
-      cctx.fillStyle = g;
-      cctx.fillRect(0,0,w,h);
-      cctx.globalCompositeOperation = 'source-over';
-    } else if(currentPreset === 'paleDream'){
-      cctx.globalCompositeOperation = 'screen';
-      cctx.fillStyle = 'rgba(255,255,255,0.14)';
-      cctx.fillRect(0,0,w,h);
-      cctx.globalCompositeOperation = 'source-over';
-    }
-
-    // 擬似グロー
-    if(values.glow > 0){
-      const glow = offscreen(w,h), gctx = glow.getContext('2d');
-      gctx.filter = `blur(${Math.max(2, values.glow * 0.65)}px)`;
-      gctx.drawImage(c,0,0);
-      cctx.globalCompositeOperation = 'screen';
-      cctx.globalAlpha = Math.min(0.45, values.glow / 85);
-      cctx.drawImage(glow,0,0);
-      cctx.globalAlpha = 1;
-      cctx.globalCompositeOperation = 'source-over';
-    }
-
-    return c;
-  }
-
-  function softMaskFrom(mask, w, h, edgeSoftPx){
-    if(edgeSoftPx <= 0) return mask;
-    const c = offscreen(w,h), cctx = c.getContext('2d');
-    cctx.filter = `blur(${edgeSoftPx}px)`;
-    cctx.drawImage(mask,0,0,w,h);
-    cctx.filter = 'none';
-    return c;
-  }
-
-  function composeTo(targetCtx, src, mask, w, h){
-    const v = getFilterValues();
-    const bg = makeTintedVersion(src, w, h, v, v.bgBlur);
-    const fg = makeTintedVersion(src, w, h, v, 0);
-    const softMask = softMaskFrom(mask, w, h, v.edgeSoft);
-
-    // 背景
-    targetCtx.clearRect(0,0,w,h);
-    targetCtx.drawImage(bg,0,0);
-
-    // 人物側だけ合成
-    const cut = offscreen(w,h), cutCtx = cut.getContext('2d');
-    cutCtx.drawImage(fg,0,0);
-    cutCtx.globalCompositeOperation = 'destination-in';
-    cutCtx.drawImage(softMask,0,0,w,h);
-    cutCtx.globalCompositeOperation = 'source-over';
-    targetCtx.drawImage(cut,0,0);
-  }
-
-  function drawMaskOverlay(){
-    if(!showAfter || !maskCanvas) return;
-    ctx.save();
-    ctx.globalAlpha = 0.18;
-    ctx.drawImage(maskCanvas,0,0,workW,workH);
-    ctx.globalCompositeOperation = 'source-atop';
-    ctx.fillStyle = 'rgba(255,215,150,0.35)';
-    ctx.fillRect(0,0,workW,workH);
-    ctx.restore();
-  }
-
-  function renderAll(){
-    if(!srcCanvas) return;
-    if(showAfter){
-      composeTo(ctx, srcCanvas, maskCanvas, workW, workH);
-      drawMaskOverlay();
-    } else {
-      ctx.clearRect(0,0,workW,workH);
-      ctx.drawImage(srcCanvas,0,0);
-    }
-  }
-
   function getPos(e){
     const rect = canvas.getBoundingClientRect();
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    return { x: (clientX - rect.left) * (workW / rect.width), y: (clientY - rect.top) * (workH / rect.height) };
+    const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+    const y = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+    return { x: x * (workW/rect.width), y: y * (workH/rect.height) };
   }
 
   function stampMask(x,y){
@@ -350,23 +425,21 @@ hr.sep{border:none;border-top:1px solid var(--border);margin:12px 0}
     g.addColorStop(0,'rgba(255,255,255,1)');
     g.addColorStop(0.7,'rgba(255,255,255,1)');
     g.addColorStop(1,'rgba(255,255,255,0)');
-    mctx.fillStyle = g;
-    mctx.beginPath();
-    mctx.arc(x,y,radius,0,Math.PI*2);
-    mctx.fill();
-    mctx.globalCompositeOperation = 'source-over';
+    mctx.fillStyle=g;
+    mctx.beginPath(); mctx.arc(x,y,radius,0,Math.PI*2); mctx.fill();
+    mctx.globalCompositeOperation='source-over';
   }
 
-  function startDraw(e){ if(!srcCanvas) return; e.preventDefault(); drawing = true; lastPt = getPos(e); stampMask(lastPt.x,lastPt.y); renderAll(); }
+  function startDraw(e){ if(!srcCanvas) return; e.preventDefault(); drawing=true; lastPt=getPos(e); stampMask(lastPt.x,lastPt.y); render(); }
   function moveDraw(e){
     if(!drawing) return; e.preventDefault();
-    const p = getPos(e), dist = Math.hypot(p.x-lastPt.x,p.y-lastPt.y), steps = Math.max(1, Math.min(28, Math.floor(dist/4)));
+    const p=getPos(e), dist=Math.hypot(p.x-lastPt.x,p.y-lastPt.y), steps=Math.max(1,Math.min(30,Math.floor(dist/4)));
     for(let i=1;i<=steps;i++){
-      const t = i/steps; stampMask(lastPt.x + (p.x-lastPt.x)*t, lastPt.y + (p.y-lastPt.y)*t);
+      const t=i/steps; stampMask(lastPt.x+(p.x-lastPt.x)*t, lastPt.y+(p.y-lastPt.y)*t);
     }
-    lastPt = p; renderAll();
+    lastPt=p; render();
   }
-  function endDraw(){ drawing = false; lastPt = null; }
+  function endDraw(){ drawing=false; lastPt=null; }
 
   canvas.addEventListener('mousedown', startDraw);
   canvas.addEventListener('mousemove', moveDraw);
@@ -375,68 +448,63 @@ hr.sep{border:none;border-top:1px solid var(--border);margin:12px 0}
   canvas.addEventListener('touchmove', moveDraw, {passive:false});
   window.addEventListener('touchend', endDraw);
 
-  $('btnPaint').addEventListener('click', ()=>{
-    drawMode = 'paint'; $('btnPaint').classList.add('active'); $('btnErase').classList.remove('active'); maskHint.textContent = '塗るモード：人物をなぞる';
-  });
-  $('btnErase').addEventListener('click', ()=>{
-    drawMode = 'erase'; $('btnErase').classList.add('active'); $('btnPaint').classList.remove('active'); maskHint.textContent = '消すモード：はみ出しを消す';
-  });
-  $('btnBefore').addEventListener('click', ()=>{ showAfter = false; $('btnBefore').classList.add('active'); $('btnAfter').classList.remove('active'); renderAll(); });
-  $('btnAfter').addEventListener('click', ()=>{ showAfter = true; $('btnAfter').classList.add('active'); $('btnBefore').classList.remove('active'); renderAll(); });
+  $('btnPaint').addEventListener('click', ()=>{ drawMode='paint'; $('btnPaint').classList.add('active'); $('btnErase').classList.remove('active'); maskHint.textContent='塗るモード：人物をなぞる'; });
+  $('btnErase').addEventListener('click', ()=>{ drawMode='erase'; $('btnErase').classList.add('active'); $('btnPaint').classList.remove('active'); maskHint.textContent='消すモード：はみ出しを消す'; });
+  $('btnBefore').addEventListener('click', ()=>{ showAfter=false; $('btnBefore').classList.add('active'); $('btnAfter').classList.remove('active'); render(); });
+  $('btnAfter').addEventListener('click', ()=>{ showAfter=true; $('btnAfter').classList.add('active'); $('btnBefore').classList.remove('active'); render(); });
 
-  sliders.filter(id => id !== 'brush').forEach(id => $(id).addEventListener('input', renderAll));
-  $('btnClearMask').addEventListener('click', ()=>{ if(!maskCanvas) return; maskCanvas.getContext('2d').clearRect(0,0,workW,workH); renderAll(); });
-  $('btnFillMask').addEventListener('click', ()=>{
-    if(!maskCanvas) return; const mctx = maskCanvas.getContext('2d'); mctx.clearRect(0,0,workW,workH); mctx.fillStyle = '#fff'; mctx.filter='blur(18px)'; mctx.beginPath(); mctx.ellipse(workW*0.5, workH*0.52, workW*0.24, workH*0.34, 0, 0, Math.PI*2); mctx.fill(); mctx.filter='none'; renderAll();
-  });
+  ['bgBlur','bokeh','bokehSize','bright','sat','contrast','warmth','glow','clarity'].forEach(id => $(id).addEventListener('input', ()=>{ if(srcCanvas){ recomputeLayers(srcCanvas, workW, workH); render(); }}));
+  $('edgeSoft').addEventListener('input', render);
+  $('btnClearMask').addEventListener('click', ()=>{ if(!maskCanvas) return; maskCanvas.getContext('2d').clearRect(0,0,workW,workH); render(); });
+  $('btnFillMask').addEventListener('click', ()=>{ if(!maskCanvas) return; const mctx=maskCanvas.getContext('2d'); mctx.clearRect(0,0,workW,workH); mctx.fillStyle='#fff'; mctx.filter='blur(18px)'; mctx.beginPath(); mctx.ellipse(workW*0.5, workH*0.52, workW*0.24, workH*0.34, 0, 0, Math.PI*2); mctx.fill(); mctx.filter='none'; render(); });
   $('btnNew').addEventListener('click', ()=>{ fileInput.value=''; fileInput.click(); });
 
   async function exportPNG(){
     const out = offscreen(fullW, fullH), octx = out.getContext('2d');
-    if(showAfter && srcCanvas && maskCanvas){
-      const fullSrc = offscreen(fullW, fullH); fullSrc.getContext('2d').drawImage(fullImg,0,0,fullW,fullH);
-      const fullMask = offscreen(fullW, fullH); fullMask.getContext('2d').drawImage(maskCanvas,0,0,workW,workH,0,0,fullW,fullH);
-      composeTo(octx, fullSrc, fullMask, fullW, fullH);
+    const base = offscreen(fullW, fullH); base.getContext('2d').drawImage(fullImg,0,0,fullW,fullH);
+    if(showAfter){
+      const fullMask = offscreen(fullW, fullH);
+      fullMask.getContext('2d').drawImage(maskCanvas,0,0,workW,workH,0,0,fullW,fullH);
+      const prevBg = cachedBg, prevFg = cachedFg, prevBokeh = cachedBokeh;
+      recomputeLayers(base, fullW, fullH);
+      const m = softMask(fullMask, fullW, fullH, values().edgeSoft / workScale);
+      const inv = inverseMask(m, fullW, fullH);
+      octx.drawImage(cachedBg,0,0);
+      clipDraw(octx, cachedBokeh, inv, fullW, fullH);
+      clipDraw(octx, cachedFg, m, fullW, fullH);
+      cachedBg = prevBg; cachedFg = prevFg; cachedBokeh = prevBokeh;
     } else {
       octx.drawImage(fullImg,0,0,fullW,fullH);
     }
 
     if($('copyrightOn').checked){
-      const pad = Math.max(18, Math.round(fullW * 0.014));
-      const fontSize = Math.max(16, Math.round(fullW * 0.018));
+      const pad = Math.max(18, Math.round(fullW*0.014));
+      const fontSize = Math.max(16, Math.round(fullW*0.018));
       octx.save();
       octx.font = `600 ${fontSize}px -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif`;
-      octx.textAlign = 'right'; octx.textBaseline = 'bottom';
       const text = '(C) SQUARE ENIX';
-      const metrics = octx.measureText(text);
-      const boxW = metrics.width + fontSize * 1.1;
-      const boxH = fontSize * 1.85;
+      const tw = octx.measureText(text).width;
+      const bw = tw + fontSize*1.15, bh = fontSize*1.9;
       const x = fullW - pad, y = fullH - pad;
-      octx.fillStyle = 'rgba(0,0,0,0.35)';
-      roundRect(octx, x - boxW, y - boxH, boxW, boxH, fontSize * 0.5); octx.fill();
-      octx.fillStyle = 'rgba(255,255,255,0.96)';
-      octx.fillText(text, x - fontSize * 0.45, y - fontSize * 0.35);
+      octx.fillStyle='rgba(0,0,0,0.34)';
+      roundRect(octx, x-bw, y-bh, bw, bh, fontSize*0.52); octx.fill();
+      octx.textAlign='right'; octx.textBaseline='bottom';
+      octx.fillStyle='rgba(255,255,255,0.97)';
+      octx.fillText(text, x-fontSize*0.46, y-fontSize*0.36);
       octx.restore();
     }
-
     return new Promise(resolve => out.toBlob(resolve,'image/png'));
   }
 
-  function roundRect(c,x,y,w,h,r){
-    c.beginPath();
-    c.moveTo(x+r,y); c.arcTo(x+w,y,x+w,y+h,r); c.arcTo(x+w,y+h,x,y+h,r); c.arcTo(x,y+h,x,y,r); c.arcTo(x,y,x+w,y,r); c.closePath();
-  }
+  function roundRect(c,x,y,w,h,r){ c.beginPath(); c.moveTo(x+r,y); c.arcTo(x+w,y,x+w,y+h,r); c.arcTo(x+w,y+h,x,y+h,r); c.arcTo(x,y+h,x,y,r); c.arcTo(x,y,x+w,y,r); c.closePath(); }
 
   $('btnSave').addEventListener('click', async ()=>{
     if(!fullImg) return;
-    $('btnSave').disabled = true; const prev = $('btnSave').textContent; $('btnSave').textContent = '書き出し中…';
+    $('btnSave').disabled=true; const prev=$('btnSave').textContent; $('btnSave').textContent='書き出し中…';
     try{
       const blob = await exportPNG();
-      const a = document.createElement('a');
-      const url = URL.createObjectURL(blob);
-      a.href = url; a.download = 'ff14_photo_studio.png'; document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(()=>URL.revokeObjectURL(url),1200);
-    }finally{ $('btnSave').disabled = false; $('btnSave').textContent = prev; }
+      const a=document.createElement('a'); const url=URL.createObjectURL(blob); a.href=url; a.download='ff14_photo_studio.png'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1200);
+    }finally{ $('btnSave').disabled=false; $('btnSave').textContent=prev; }
   });
 
   window.addEventListener('error', e => { if(pickerCard.style.display !== 'none') setStatus('JavaScriptエラー: ' + (e.message || '不明なエラー')); });

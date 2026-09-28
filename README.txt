@@ -1,4 +1,4 @@
-FF14 Photo Studio Filter
+FF14 Photo Studio Filter v2
 
-index.html を HTTPS のWebページとして公開して使ってください。
-ChatGPT内プレビューでは画像選択後のJSが不安定な場合があります。
+人物を塗って背景だけぼかし＋玉ボケ＋GShade風フィルタをかける版です。
+index.html を HTTPS で公開して使用してください。
