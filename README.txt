@@ -1,3 +1,4 @@
-FF14 Photo Studio Auto Background Blur v2
+FF14 Photo Studio v4
 
-index.html を HTTPS のWebページとして公開して使用してください。
+Yuzu Pic Studioの背景ぼかし方式に合わせ、自動人物判定＋補正ブラシを搭載しています。
+人物が誤ってぼけた部分は「補正ブラシを使う」→「鮮明に戻す」でなぞってください。
