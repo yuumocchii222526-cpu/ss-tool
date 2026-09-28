@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#17171b">
-<title>FF14 Photo Studio Auto Background Blur v6</title>
+<title>FF14 Photo Studio</title>
 <style>
 :root{--bg:#17171b;--panel:#1f2024;--panel2:#26272c;--accent:#c9a869;--text:#ebe6dc;--dim:#a39f95;--border:#34343b}
 *{box-sizing:border-box}
@@ -36,6 +36,7 @@ h1{margin:0;font-size:23px;color:var(--accent);font-family:Georgia,serif}
 .row span{width:98px;flex:0 0 auto}
 .row output{width:42px;text-align:right;color:var(--dim);font-size:12px}
 input[type=range]{flex:1;accent-color:var(--accent)}
+select{width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--border);background:var(--panel2);color:var(--text);font-size:14px;appearance:auto}
 .toggle,.presets{display:grid;gap:8px}.toggle{grid-template-columns:1fr 1fr}.presets{grid-template-columns:1fr 1fr}
 .toggle button,.presets button{padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--panel2);color:var(--text);font-size:13px;cursor:pointer}
 .toggle button.active,.presets button.active{background:var(--accent);color:#191919;border-color:var(--accent)}
@@ -105,6 +106,7 @@ input[type=range]{flex:1;accent-color:var(--accent)}
     <div class="group">
       <h2>書き出し</h2>
       <label class="check"><input type="checkbox" id="copyrightOn" checked> (C) SQUARE ENIX を入れる</label>
+      <div class="row" style="align-items:flex-start;"><span style="padding-top:10px;">透かし位置</span><select id="copyrightPos" aria-label="透かし位置"><option value="bottom-right">右下</option><option value="bottom-left">左下</option><option value="top-right">右上</option><option value="top-left">左上</option></select></div>
       <button class="btn" id="btnSave" style="margin-top:12px;">PNGで保存</button>
       <button class="btn secondary" id="btnNew" style="margin-top:8px;">別の画像を選ぶ</button>
     </div>
@@ -136,6 +138,10 @@ input[type=range]{flex:1;accent-color:var(--accent)}
   let correctionMode='restore';
   let painting=false;
   let lastPaint=null;
+  let paintRect=null;
+  let paintScaleX=1;
+  let paintScaleY=1;
+  let paintRadius=20;
 
   const WORK_MAX=1600;
 
@@ -451,38 +457,132 @@ input[type=range]{flex:1;accent-color:var(--accent)}
   $('btnAfter').addEventListener('click',()=>{showAfter=true;$('btnAfter').classList.add('active');$('btnBefore').classList.remove('active');render();});
   $('blurOn').addEventListener('change',render);
   sliderIds.forEach(id=>$(id).addEventListener('input',render));
-  $('correctionOn').addEventListener('change',()=>{canvasWrap.classList.toggle('is-correcting',$('correctionOn').checked);});
+  $('correctionOn').addEventListener('change',()=>{canvasWrap.classList.toggle('is-correcting',$('correctionOn').checked);if(!$('correctionOn').checked){painting=false;lastPaint=null;paintRect=null;maskPaintCtx.clearRect(0,0,workW,workH);}});
   $('restoreBtn').addEventListener('click',()=>{correctionMode='restore';$('restoreBtn').classList.add('active');$('addBlurBtn').classList.remove('active');});
   $('addBlurBtn').addEventListener('click',()=>{correctionMode='add';$('addBlurBtn').classList.add('active');$('restoreBtn').classList.remove('active');});
   $('clearCorrection').addEventListener('click',()=>{if(addBlurMask)addBlurMask.getContext('2d').clearRect(0,0,workW,workH);if(restoreSharpMask)restoreSharpMask.getContext('2d').clearRect(0,0,workW,workH);maskPaintCtx.clearRect(0,0,workW,workH);render();});
 
+  // 補正ブラシ軽量化：ドラッグ中は重い画像再処理を行わず、
+  // マスクと軽いブラシ軌跡だけ更新。加工結果は指を離した時に1回だけ再描画する。
+  function beginPaint(clientX,clientY){
+    paintRect=maskPaintCanvas.getBoundingClientRect();
+    paintScaleX=workW/paintRect.width;
+    paintScaleY=workH/paintRect.height;
+    paintRadius=(+$('brushSize').value/2)*paintScaleX;
+    lastPaint=null;
+    maskPaintCtx.clearRect(0,0,workW,workH);
+    paintPoint(clientX,clientY);
+  }
+
+  function drawBrushPreview(x,y,prev){
+    maskPaintCtx.save();
+    maskPaintCtx.strokeStyle=correctionMode==='restore'?'rgba(120,220,160,.42)':'rgba(230,190,105,.42)';
+    maskPaintCtx.fillStyle=maskPaintCtx.strokeStyle;
+    maskPaintCtx.lineWidth=paintRadius*2;
+    maskPaintCtx.lineCap='round';
+    maskPaintCtx.lineJoin='round';
+    if(prev){
+      maskPaintCtx.beginPath();
+      maskPaintCtx.moveTo(prev.x,prev.y);
+      maskPaintCtx.lineTo(x,y);
+      maskPaintCtx.stroke();
+    }else{
+      maskPaintCtx.beginPath();
+      maskPaintCtx.arc(x,y,paintRadius,0,Math.PI*2);
+      maskPaintCtx.fill();
+    }
+    maskPaintCtx.restore();
+  }
+
   function paintPoint(clientX,clientY){
-    if(!autoBackgroundMask) return;
-    const rect=maskPaintCanvas.getBoundingClientRect();
-    const x=(clientX-rect.left)*(workW/rect.width), y=(clientY-rect.top)*(workH/rect.height);
-    const radius=(+$('brushSize').value/2)*(workW/rect.width);
+    if(!autoBackgroundMask || !paintRect) return;
+    const x=(clientX-paintRect.left)*paintScaleX;
+    const y=(clientY-paintRect.top)*paintScaleY;
     const target=correctionMode==='add'?addBlurMask:restoreSharpMask;
     const tctx=target.getContext('2d');
-    tctx.strokeStyle='rgba(255,255,255,1)';tctx.fillStyle='rgba(255,255,255,1)';tctx.lineWidth=radius*2;tctx.lineCap='round';tctx.lineJoin='round';
-    if(lastPaint){tctx.beginPath();tctx.moveTo(lastPaint.x,lastPaint.y);tctx.lineTo(x,y);tctx.stroke();}
-    else {tctx.beginPath();tctx.arc(x,y,radius,0,Math.PI*2);tctx.fill();}
+    tctx.strokeStyle='rgba(255,255,255,1)';
+    tctx.fillStyle='rgba(255,255,255,1)';
+    tctx.lineWidth=paintRadius*2;
+    tctx.lineCap='round';
+    tctx.lineJoin='round';
+    const prev=lastPaint;
+    if(prev){
+      tctx.beginPath();
+      tctx.moveTo(prev.x,prev.y);
+      tctx.lineTo(x,y);
+      tctx.stroke();
+    }else{
+      tctx.beginPath();
+      tctx.arc(x,y,paintRadius,0,Math.PI*2);
+      tctx.fill();
+    }
+    drawBrushPreview(x,y,prev);
     lastPaint={x,y};
   }
-  maskPaintCanvas.addEventListener('pointerdown',e=>{if(!$('correctionOn').checked)return;e.preventDefault();painting=true;lastPaint=null;maskPaintCanvas.setPointerCapture(e.pointerId);paintPoint(e.clientX,e.clientY);render();});
-  maskPaintCanvas.addEventListener('pointermove',e=>{if(!painting)return;e.preventDefault();paintPoint(e.clientX,e.clientY);render();});
-  maskPaintCanvas.addEventListener('pointerup',()=>{painting=false;lastPaint=null;});
-  maskPaintCanvas.addEventListener('pointercancel',()=>{painting=false;lastPaint=null;});
+
+  function finishPaint(){
+    if(!painting) return;
+    painting=false;
+    lastPaint=null;
+    paintRect=null;
+    maskPaintCtx.clearRect(0,0,workW,workH);
+    render();
+  }
+
+  maskPaintCanvas.addEventListener('pointerdown',e=>{
+    if(!$('correctionOn').checked)return;
+    e.preventDefault();
+    painting=true;
+    maskPaintCanvas.setPointerCapture(e.pointerId);
+    beginPaint(e.clientX,e.clientY);
+  });
+  maskPaintCanvas.addEventListener('pointermove',e=>{
+    if(!painting)return;
+    e.preventDefault();
+    paintPoint(e.clientX,e.clientY);
+  });
+  maskPaintCanvas.addEventListener('pointerup',finishPaint);
+  maskPaintCanvas.addEventListener('pointercancel',finishPaint);
 
   $('btnNew').addEventListener('click',()=>{fileInput.value='';fileInput.click();});
 
   function roundRect(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath();}
+
+  function drawCopyrightWatermark(octx,w,h){
+    const pad=Math.max(18,Math.round(w*.014));
+    const fontSize=Math.max(16,Math.round(w*.018));
+    const text='(C) SQUARE ENIX';
+    const pos=$('copyrightPos').value;
+
+    octx.save();
+    octx.font=`600 ${fontSize}px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif`;
+    const tw=octx.measureText(text).width;
+    const bw=tw+fontSize*1.15;
+    const bh=fontSize*1.9;
+
+    const isLeft=pos.endsWith('left');
+    const isTop=pos.startsWith('top');
+    const boxX=isLeft?pad:w-pad-bw;
+    const boxY=isTop?pad:h-pad-bh;
+
+    octx.fillStyle='rgba(0,0,0,.34)';
+    roundRect(octx,boxX,boxY,bw,bh,fontSize*.52);
+    octx.fill();
+    octx.textAlign=isLeft?'left':'right';
+    octx.textBaseline='bottom';
+    octx.fillStyle='rgba(255,255,255,.97)';
+    const textX=isLeft?boxX+fontSize*.46:boxX+bw-fontSize*.46;
+    const textY=boxY+bh-fontSize*.36;
+    octx.fillText(text,textX,textY);
+    octx.restore();
+  }
 
   async function exportPNG(){
     const fullSrc=offscreen(fullW,fullH);fullSrc.getContext('2d').drawImage(fullImg,0,0,fullW,fullH);
     let fullMask=null;
     if(autoBackgroundMask){fullMask=buildEffectiveBackgroundMask(fullW,fullH);}
     const out=composeProcessed(fullSrc,fullW,fullH,fullMask),octx=out.getContext('2d');
-    if($('copyrightOn').checked){const pad=Math.max(18,Math.round(fullW*.014)),fontSize=Math.max(16,Math.round(fullW*.018));octx.save();octx.font=`600 ${fontSize}px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif`;const text='(C) SQUARE ENIX',tw=octx.measureText(text).width,bw=tw+fontSize*1.15,bh=fontSize*1.9,x=fullW-pad,y=fullH-pad;octx.fillStyle='rgba(0,0,0,.34)';roundRect(octx,x-bw,y-bh,bw,bh,fontSize*.52);octx.fill();octx.textAlign='right';octx.textBaseline='bottom';octx.fillStyle='rgba(255,255,255,.97)';octx.fillText(text,x-fontSize*.46,y-fontSize*.36);octx.restore();}
+    if($('copyrightOn').checked) drawCopyrightWatermark(octx,fullW,fullH);
     return new Promise(resolve=>out.toBlob(resolve,'image/png'));
   }
 
