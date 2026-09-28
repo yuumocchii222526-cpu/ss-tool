@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#17171b">
-<title>FF14 Photo Studio Auto Background Blur</title>
+<title>FF14 Photo Studio Auto Background Blur v2</title>
 <style>
 :root{--bg:#17171b;--panel:#1f2024;--panel2:#26272c;--accent:#c9a869;--text:#ebe6dc;--dim:#a39f95;--border:#34343b}
 *{box-sizing:border-box}
@@ -46,7 +46,7 @@ input[type=range]{flex:1;accent-color:var(--accent)}
 <div class="app">
 <header>
   <h1>FF14 Photo Studio</h1>
-  <p class="sub">自動背景ぼかし＋GShade風フィルタ。人物を自動判定し、背景だけをぼかします。PNG保存時に (C) SQUARE ENIX を入れられます。</p>
+  <p class="sub">自動背景ぼかし＋GShade風フィルタ。人物保護を強めた自動判定で背景だけをぼかし、人物くっきりも調整できます。PNG保存時に (C) SQUARE ENIX を入れられます。</p>
 </header>
 <div class="layout">
   <section>
@@ -83,6 +83,7 @@ input[type=range]{flex:1;accent-color:var(--accent)}
       <div class="row"><span>コントラスト</span><input id="contrast" type="range" min="70" max="150" value="90"><output id="contrastOut">90</output></div>
       <div class="row"><span>暖かさ</span><input id="warmth" type="range" min="-30" max="30" value="16"><output id="warmthOut">16</output></div>
       <div class="row"><span>ふんわり光</span><input id="glow" type="range" min="0" max="45" value="24"><output id="glowOut">24</output></div>
+      <div class="row"><span>人物くっきり</span><input id="subjectPop" type="range" min="0" max="40" value="16"><output id="subjectPopOut">16</output></div>
     </div>
 
     <div class="group">
@@ -102,7 +103,7 @@ input[type=range]{flex:1;accent-color:var(--accent)}
   const MEDIAPIPE_VERSION = '0.10.14';
   const fileInput=$('fileInput'), pickerCard=$('pickerCard'), status=$('status'), panel=$('panel'), canvasWrap=$('canvasWrap'), canvas=$('canvas'), ctx=canvas.getContext('2d');
   const segDot=$('segDot'), segStatus=$('segStatus');
-  const sliderIds=['blurStrength','bright','sat','contrast','warmth','glow'];
+  const sliderIds=['blurStrength','bright','sat','contrast','warmth','glow','subjectPop'];
   sliderIds.forEach(id=>{const el=$(id), out=$(id+'Out'); out.textContent=el.value; el.addEventListener('input',()=>out.textContent=el.value);});
 
   let fullImg=null, fullW=0, fullH=0, workW=0, workH=0, srcCanvas=null;
@@ -111,13 +112,15 @@ input[type=range]{flex:1;accent-color:var(--accent)}
   const WORK_MAX=1600;
 
   const PRESETS={
-    sampleMatch:{bright:118,sat:86,contrast:90,warmth:16,glow:24},
-    flowerLight:{bright:114,sat:98,contrast:95,warmth:14,glow:20},
-    softBloom:{bright:110,sat:92,contrast:91,warmth:10,glow:26},
-    paleDream:{bright:120,sat:74,contrast:85,warmth:11,glow:28}
+    sampleMatch:{bright:118,sat:86,contrast:90,warmth:16,glow:24,subjectPop:16},
+    flowerLight:{bright:114,sat:98,contrast:95,warmth:14,glow:20,subjectPop:12},
+    softBloom:{bright:110,sat:92,contrast:91,warmth:10,glow:26,subjectPop:10},
+    paleDream:{bright:120,sat:74,contrast:85,warmth:11,glow:28,subjectPop:8}
   };
 
   function offscreen(w,h){const c=document.createElement('canvas');c.width=w;c.height=h;return c;}
+  function clamp01(v){return Math.max(0,Math.min(1,v));}
+  function smoothstep(edge0,edge1,x){const t=clamp01((x-edge0)/(edge1-edge0));return t*t*(3-2*t);}
   function setStatus(msg){status.textContent=msg;}
   function updateSegUI(){
     segDot.className='dot';
@@ -150,25 +153,84 @@ input[type=range]{flex:1;accent-color:var(--accent)}
 
   async function computeAutoBackgroundMask(){
     if(!fullImg || segLoading) return;
-    segLoading=true; segError=null; updateSegUI();
+    segLoading=true;
+    segError=null;
+    updateSegUI();
+
     try{
       const segmenter=await ensureImageSegmenterLoaded();
       const result=segmenter.segment(fullImg);
       const confidenceMask=result.confidenceMasks[0];
       const floats=confidenceMask.getAsFloat32Array();
-      const mw=confidenceMask.width, mh=confidenceMask.height;
-      const raw=offscreen(mw,mh), rctx=raw.getContext('2d');
-      const imgData=rctx.createImageData(mw,mh);
+      const mw=confidenceMask.width;
+      const mh=confidenceMask.height;
+
+      const subjectRaw=offscreen(mw,mh);
+      const sctx=subjectRaw.getContext('2d');
+      const imgData=sctx.createImageData(mw,mh);
+
+      const SUBJECT_LOW=0.42;
+      const SUBJECT_HIGH=0.78;
+
       for(let i=0;i<floats.length;i++){
-        const bgAlpha=Math.round((1-floats[i])*255);
-        imgData.data[i*4]=255;imgData.data[i*4+1]=255;imgData.data[i*4+2]=255;imgData.data[i*4+3]=bgAlpha;
+        const conf=floats[i];
+        const subjectAlpha=Math.round(smoothstep(SUBJECT_LOW,SUBJECT_HIGH,conf)*255);
+        imgData.data[i*4]=255;
+        imgData.data[i*4+1]=255;
+        imgData.data[i*4+2]=255;
+        imgData.data[i*4+3]=subjectAlpha;
       }
-      rctx.putImageData(imgData,0,0);
-      confidenceMask.close(); if(typeof result.close==='function') result.close();
+
+      sctx.putImageData(imgData,0,0);
+      confidenceMask.close();
+      if(typeof result.close==='function') result.close();
+
+      const subjectScaled=offscreen(workW,workH);
+      const ssctx=subjectScaled.getContext('2d');
+      ssctx.imageSmoothingEnabled=true;
+      if('imageSmoothingQuality' in ssctx) ssctx.imageSmoothingQuality='high';
+      ssctx.drawImage(subjectRaw,0,0,workW,workH);
+
+      const expandPx=10;
+      const expanded=offscreen(workW,workH);
+      const exctx=expanded.getContext('2d');
+      exctx.filter=`blur(${expandPx}px)`;
+      exctx.drawImage(subjectScaled,0,0);
+      exctx.filter='none';
+
+      const exData=exctx.getImageData(0,0,workW,workH);
+      const d=exData.data;
+      for(let i=0;i<d.length;i+=4){
+        const a=d[i+3];
+        d[i]=255;
+        d[i+1]=255;
+        d[i+2]=255;
+        d[i+3]=a>24 ? 255 : 0;
+      }
+      exctx.putImageData(exData,0,0);
+
+      const featheredSubject=offscreen(workW,workH);
+      const fctx=featheredSubject.getContext('2d');
+      fctx.filter='blur(4px)';
+      fctx.drawImage(expanded,0,0);
+      fctx.filter='none';
+
       autoBackgroundMask=offscreen(workW,workH);
-      autoBackgroundMask.getContext('2d').drawImage(raw,0,0,workW,workH);
-    }catch(err){console.error(err);segError=String(err?.message||err);autoBackgroundMask=null;}
-    finally{segLoading=false;updateSegUI();render();}
+      const mctx=autoBackgroundMask.getContext('2d');
+      mctx.fillStyle='#fff';
+      mctx.fillRect(0,0,workW,workH);
+      mctx.globalCompositeOperation='destination-out';
+      mctx.drawImage(featheredSubject,0,0);
+      mctx.globalCompositeOperation='source-over';
+    }catch(err){
+      console.error(err);
+      segError=String(err?.message||err);
+      autoBackgroundMask=null;
+    }finally{
+      segLoading=false;
+      updateSegUI();
+      render();
+    }
   }
 
   // Yuzu Pic Studioと同じ考え方: 一度小さく縮めてから拡大して滑らかなぼかしを作る
@@ -188,7 +250,74 @@ input[type=range]{flex:1;accent-color:var(--accent)}
     const out=offscreen(w,h), octx=out.getContext('2d');octx.imageSmoothingEnabled=true;if('imageSmoothingQuality' in octx)octx.imageSmoothingQuality='high';octx.drawImage(cur,0,0,cw,ch,0,0,w,h);return out;
   }
 
-  function values(){return{bright:+$('bright').value/100,sat:+$('sat').value/100,contrast:+$('contrast').value/100,warmth:+$('warmth').value,glow:+$('glow').value,blur:+$('blurStrength').value};}
+  function subjectMaskFromBackgroundMask(mask,w,h){
+    const out=offscreen(w,h);
+    const octx=out.getContext('2d');
+    octx.fillStyle='#fff';
+    octx.fillRect(0,0,w,h);
+    octx.globalCompositeOperation='destination-out';
+    octx.drawImage(mask,0,0,w,h);
+    octx.globalCompositeOperation='source-over';
+    return out;
+  }
+
+  function sharpenCanvas(source,w,h,amount){
+    const srcC=offscreen(w,h);
+    const sctx=srcC.getContext('2d');
+    sctx.drawImage(source,0,0,w,h);
+    const src=sctx.getImageData(0,0,w,h);
+    const s=src.data;
+    const out=offscreen(w,h);
+    const octx=out.getContext('2d');
+    const dst=octx.createImageData(w,h);
+    const d=dst.data;
+    const t=Math.max(0,Math.min(1,amount/40));
+    const center=1+4*t;
+    const edge=-t;
+    const clamp255=v=>Math.max(0,Math.min(255,v));
+
+    for(let y=0;y<h;y++){
+      for(let x=0;x<w;x++){
+        const idx=(y*w+x)*4;
+        if(x===0||y===0||x===w-1||y===h-1){
+          d[idx]=s[idx]; d[idx+1]=s[idx+1]; d[idx+2]=s[idx+2]; d[idx+3]=s[idx+3];
+          continue;
+        }
+        const top=((y-1)*w+x)*4;
+        const bottom=((y+1)*w+x)*4;
+        const left=(y*w+(x-1))*4;
+        const right=(y*w+(x+1))*4;
+        d[idx]=clamp255(s[idx]*center+s[top]*edge+s[bottom]*edge+s[left]*edge+s[right]*edge);
+        d[idx+1]=clamp255(s[idx+1]*center+s[top+1]*edge+s[bottom+1]*edge+s[left+1]*edge+s[right+1]*edge);
+        d[idx+2]=clamp255(s[idx+2]*center+s[top+2]*edge+s[bottom+2]*edge+s[left+2]*edge+s[right+2]*edge);
+        d[idx+3]=s[idx+3];
+      }
+    }
+    octx.putImageData(dst,0,0);
+    return out;
+  }
+
+  function applySubjectPop(source,w,h,backgroundMask,amount){
+    if(!backgroundMask || amount<=0) return source;
+    const subjectMask=subjectMaskFromBackgroundMask(backgroundMask,w,h);
+    const sharpened=sharpenCanvas(source,w,h,amount);
+    const sharpSubject=offscreen(w,h);
+    const ssctx=sharpSubject.getContext('2d');
+    ssctx.drawImage(sharpened,0,0);
+    ssctx.globalCompositeOperation='destination-in';
+    ssctx.drawImage(subjectMask,0,0,w,h);
+    ssctx.globalCompositeOperation='source-over';
+
+    const out=offscreen(w,h);
+    const octx=out.getContext('2d');
+    octx.drawImage(source,0,0);
+    octx.globalAlpha=Math.min(0.9,amount/24);
+    octx.drawImage(sharpSubject,0,0);
+    octx.globalAlpha=1;
+    return out;
+  }
+
+  function values(){return{bright:+$('bright').value/100,sat:+$('sat').value/100,contrast:+$('contrast').value/100,warmth:+$('warmth').value,glow:+$('glow').value,blur:+$('blurStrength').value,subjectPop:+$('subjectPop').value};}
 
   function applyFilter(src,w,h){
     const v=values(), out=offscreen(w,h), octx=out.getContext('2d');
@@ -204,11 +333,29 @@ input[type=range]{flex:1;accent-color:var(--accent)}
 
   function composeProcessed(src,w,h,mask){
     const filtered=applyFilter(src,w,h);
-    if(!$('blurOn').checked || !mask) return filtered;
-    const blurred=buildScaleBlur(filtered,w,h,values().blur);
-    const blurLayer=offscreen(w,h), bctx=blurLayer.getContext('2d');
-    bctx.drawImage(blurred,0,0);bctx.globalCompositeOperation='destination-in';bctx.drawImage(mask,0,0,w,h);bctx.globalCompositeOperation='source-over';
-    const out=offscreen(w,h), octx=out.getContext('2d');octx.drawImage(filtered,0,0);octx.drawImage(blurLayer,0,0);return out;
+    const v=values();
+    let out=filtered;
+
+    if($('blurOn').checked && mask){
+      const blurred=buildScaleBlur(filtered,w,h,v.blur);
+      const blurLayer=offscreen(w,h);
+      const bctx=blurLayer.getContext('2d');
+      bctx.drawImage(blurred,0,0);
+      bctx.globalCompositeOperation='destination-in';
+      bctx.drawImage(mask,0,0,w,h);
+      bctx.globalCompositeOperation='source-over';
+
+      const merged=offscreen(w,h);
+      const mctx=merged.getContext('2d');
+      mctx.drawImage(filtered,0,0);
+      mctx.drawImage(blurLayer,0,0);
+      out=merged;
+    }
+
+    if(v.subjectPop>0 && mask){
+      out=applySubjectPop(out,w,h,mask,v.subjectPop);
+    }
+    return out;
   }
 
   function render(){
