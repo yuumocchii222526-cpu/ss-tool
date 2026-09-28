@@ -1,4 +1,4 @@
-FF14 Photo Studio Filter v6
+FF14 Photo Studio Auto Background Blur
 
-背景ふんわり・玉ボケ・ぼかしが背景にだけかかるよう修正した版です。
-index.html を HTTPS で公開して使用してください。
+Yuzu Pic Studioの背景ぼかし方式（人物自動判定＋縮小拡大式ぼかし）を参考にした版です。
+初回の人物判定にはネット接続が必要です。
