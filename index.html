@@ -89,13 +89,13 @@ input[type=range]{flex:1;accent-color:var(--accent)}
       <div class="presets" id="presetWrap">
         <button data-preset="glow" class="active">Glow</button>
         <button data-preset="bloom">Bloom</button>
-        <button data-preset="veil">Veil</button>
+        <button data-preset="clear">Clear</button>
         <button data-preset="dream">Dream</button>
       </div>
-      <div class="row"><span>明るさ</span><input id="bright" type="range" min="70" max="145" value="118"><output id="brightOut">118</output></div>
-      <div class="row"><span>彩度</span><input id="sat" type="range" min="40" max="180" value="86"><output id="satOut">86</output></div>
-      <div class="row"><span>コントラスト</span><input id="contrast" type="range" min="70" max="150" value="90"><output id="contrastOut">90</output></div>
-      <div class="row"><span>暖かさ</span><input id="warmth" type="range" min="-30" max="30" value="16"><output id="warmthOut">16</output></div>
+      <div class="row"><span>明るさ</span><input id="bright" type="range" min="70" max="145" value="110"><output id="brightOut">110</output></div>
+      <div class="row"><span>彩度</span><input id="sat" type="range" min="40" max="180" value="106"><output id="satOut">106</output></div>
+      <div class="row"><span>コントラスト</span><input id="contrast" type="range" min="70" max="150" value="108"><output id="contrastOut">108</output></div>
+      <div class="row"><span>暖かさ</span><input id="warmth" type="range" min="-30" max="30" value="8"><output id="warmthOut">8</output></div>
       <div class="row"><span>ふんわり光</span><input id="glow" type="range" min="0" max="45" value="24"><output id="glowOut">24</output></div>
       <div class="row"><span>人物くっきり</span><input id="subjectPop" type="range" min="0" max="40" value="16"><output id="subjectPopOut">16</output></div>
     </div>
@@ -136,12 +136,13 @@ input[type=range]{flex:1;accent-color:var(--accent)}
 
   const WORK_MAX=1600;
 
-  const PRESETS={
-    glow:{bright:118,sat:86,contrast:90,warmth:16,glow:24,subjectPop:16},
-    bloom:{bright:114,sat:98,contrast:95,warmth:14,glow:20,subjectPop:12},
-    veil:{bright:110,sat:92,contrast:91,warmth:10,glow:26,subjectPop:10},
-    dream:{bright:120,sat:74,contrast:85,warmth:11,glow:28,subjectPop:8}
+  const FILTER_PRESETS={
+    glow:{bright:110,sat:106,contrast:108,warmth:8,glow:24,subjectPop:16},
+    bloom:{bright:114,sat:94,contrast:98,warmth:5,glow:14,subjectPop:10},
+    clear:{bright:106,sat:107,contrast:116,warmth:2,glow:4,subjectPop:28},
+    dream:{bright:112,sat:92,contrast:90,warmth:4,glow:18,subjectPop:6}
   };
+  const PRESETS=FILTER_PRESETS;
 
   function offscreen(w,h){const c=document.createElement('canvas');c.width=w;c.height=h;return c;}
   function clamp01(v){return Math.max(0,Math.min(1,v));}
@@ -377,8 +378,8 @@ input[type=range]{flex:1;accent-color:var(--accent)}
     octx.drawImage(src,0,0,w,h);octx.filter='none';
     if(v.warmth!==0){const warm=Math.max(0,v.warmth),cool=Math.max(0,-v.warmth);if(warm){octx.globalCompositeOperation='soft-light';octx.fillStyle=`rgba(255,186,130,${warm/110})`;octx.fillRect(0,0,w,h);}if(cool){octx.globalCompositeOperation='soft-light';octx.fillStyle=`rgba(120,188,255,${cool/120})`;octx.fillRect(0,0,w,h);}octx.globalCompositeOperation='source-over';}
     if(currentPreset==='bloom'){octx.globalCompositeOperation='soft-light';const g=octx.createLinearGradient(0,0,w,h);g.addColorStop(0,'rgba(255,214,214,.13)');g.addColorStop(1,'rgba(255,240,200,.12)');octx.fillStyle=g;octx.fillRect(0,0,w,h);octx.globalCompositeOperation='source-over';}
-    else if(currentPreset==='veil'){octx.globalCompositeOperation='screen';octx.fillStyle='rgba(255,245,240,.08)';octx.fillRect(0,0,w,h);octx.globalCompositeOperation='source-over';}
     else if(currentPreset==='dream'||currentPreset==='glow'){octx.globalCompositeOperation='screen';octx.fillStyle='rgba(255,255,255,.10)';octx.fillRect(0,0,w,h);octx.globalCompositeOperation='source-over';}
+    else if(currentPreset==='clear'){octx.globalCompositeOperation='source-over';}
     if(v.glow>0){const glow=offscreen(w,h),gctx=glow.getContext('2d');gctx.filter=`blur(${Math.max(2,v.glow*.7)}px)`;gctx.drawImage(out,0,0);octx.globalCompositeOperation='screen';octx.globalAlpha=Math.min(.48,v.glow/90);octx.drawImage(glow,0,0);octx.globalAlpha=1;octx.globalCompositeOperation='source-over';}
     return out;
   }
@@ -419,6 +420,7 @@ input[type=range]{flex:1;accent-color:var(--accent)}
 
   function applyPreset(name){currentPreset=name;const p=PRESETS[name];Object.keys(p).forEach(k=>{$(k).value=p[k];$(k+'Out').textContent=p[k];});document.querySelectorAll('#presetWrap button').forEach(b=>b.classList.toggle('active',b.dataset.preset===name));render();}
   document.querySelectorAll('#presetWrap button').forEach(btn=>btn.addEventListener('click',()=>applyPreset(btn.dataset.preset)));
+  applyPreset('glow');
 
   fileInput.addEventListener('change',async()=>{
     const file=fileInput.files&&fileInput.files[0];if(!file)return;
