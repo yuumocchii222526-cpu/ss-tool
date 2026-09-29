@@ -165,6 +165,7 @@ input[type=range]{flex:1;accent-color:var(--accent);height:34px;touch-action:pan
       <div class="preset-actions">
         <button class="btn secondary" type="button" id="btnResetPreset">フィルタを初期値に戻す</button>
       </div>
+      <div class="row"><span>フィルタの強さ</span><input id="filterStrength" type="range" min="0" max="100" value="100"><output id="filterStrengthOut">100</output></div>
       <div class="row"><span>明るさ</span><input id="bright" type="range" min="70" max="145" value="110"><output id="brightOut">110</output></div>
       <div class="row"><span>彩度</span><input id="sat" type="range" min="40" max="180" value="106"><output id="satOut">106</output></div>
       <div class="row"><span>コントラスト</span><input id="contrast" type="range" min="70" max="150" value="108"><output id="contrastOut">108</output></div>
@@ -219,7 +220,7 @@ input[type=range]{flex:1;accent-color:var(--accent);height:34px;touch-action:pan
   const processingOverlay=$('processingOverlay'), overlayText=$('overlayText'), overlaySub=$('overlaySub');
   const stickySavebar=$('stickySavebar'), btnSaveSticky=$('btnSaveSticky'), btnShareSticky=$('btnShareSticky');
   const toastEl=$('toast'), toastText=$('toastText');
-  const sliderIds=['blurStrength','brushSize','bright','sat','contrast','warmth','glow','subjectPop','copyrightOffsetX','copyrightOffsetY','copyrightScale','copyrightOpacity'];
+  const sliderIds=['blurStrength','brushSize','filterStrength','bright','sat','contrast','warmth','glow','subjectPop','copyrightOffsetX','copyrightOffsetY','copyrightScale','copyrightOpacity'];
   sliderIds.forEach(id=>{const el=$(id), out=$(id+'Out'); out.textContent=el.value; el.addEventListener('input',()=>out.textContent=el.value);});
 
   let fullImg=null, fullW=0, fullH=0, workW=0, workH=0, srcCanvas=null;
@@ -564,7 +565,7 @@ input[type=range]{flex:1;accent-color:var(--accent);height:34px;touch-action:pan
     return out;
   }
 
-  function values(){return{bright:+$('bright').value/100,sat:+$('sat').value/100,contrast:+$('contrast').value/100,warmth:+$('warmth').value,glow:+$('glow').value,blur:+$('blurStrength').value,subjectPop:+$('subjectPop').value};}
+  function values(){return{filterStrength:+$('filterStrength').value/100,bright:+$('bright').value/100,sat:+$('sat').value/100,contrast:+$('contrast').value/100,warmth:+$('warmth').value,glow:+$('glow').value,blur:+$('blurStrength').value,subjectPop:+$('subjectPop').value};}
 
   function applyFilter(src,w,h){
     const v=values(), out=offscreen(w,h), octx=out.getContext('2d');
@@ -578,7 +579,14 @@ input[type=range]{flex:1;accent-color:var(--accent);height:34px;touch-action:pan
     else if(currentPreset==='glow'){octx.globalCompositeOperation='screen';octx.fillStyle='rgba(255,255,255,.10)';octx.fillRect(0,0,w,h);octx.globalCompositeOperation='source-over';}
     else if(currentPreset==='clear'){octx.globalCompositeOperation='source-over';}
     if(v.glow>0){const glow=offscreen(w,h),gctx=glow.getContext('2d');gctx.filter=`blur(${Math.max(2,v.glow*.7)}px)`;gctx.drawImage(out,0,0);octx.globalCompositeOperation='screen';octx.globalAlpha=Math.min(.48,v.glow/90);octx.drawImage(glow,0,0);octx.globalAlpha=1;octx.globalCompositeOperation='source-over';}
-    return out;
+    if(v.filterStrength>=.999) return out;
+    if(v.filterStrength<=.001){const plain=offscreen(w,h);plain.getContext('2d').drawImage(src,0,0,w,h);return plain;}
+    const mixed=offscreen(w,h),mctx=mixed.getContext('2d');
+    mctx.drawImage(src,0,0,w,h);
+    mctx.globalAlpha=v.filterStrength;
+    mctx.drawImage(out,0,0,w,h);
+    mctx.globalAlpha=1;
+    return mixed;
   }
 
   function composeProcessed(src,w,h,mask){
