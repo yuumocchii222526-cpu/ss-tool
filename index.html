@@ -257,9 +257,9 @@ input[type=range]{flex:1;accent-color:var(--accent);height:34px;touch-action:pan
     glow:{bright:110,sat:106,contrast:108,warmth:8,glow:24,subjectPop:16},
     bloom:{bright:114,sat:94,contrast:98,warmth:5,glow:14,subjectPop:10},
     clear:{bright:106,sat:107,contrast:116,warmth:2,glow:4,subjectPop:28},
-    winter:{bright:109,sat:93,contrast:96,warmth:-10,glow:15,subjectPop:14},
+    winter:{bright:110,sat:101,contrast:98,warmth:-12,glow:15,subjectPop:14},
     wooton:{bright:104,sat:116,contrast:106,warmth:22,glow:13,subjectPop:15},
-    sakura:{bright:111,sat:88,contrast:92,warmth:6,glow:14,subjectPop:10}
+    sakura:{bright:112,sat:92,contrast:91,warmth:8,glow:15,subjectPop:10}
   };
   const PRESETS=FILTER_PRESETS;
 
@@ -568,9 +568,9 @@ input[type=range]{flex:1;accent-color:var(--accent);height:34px;touch-action:pan
     octx.drawImage(src,0,0,w,h);octx.filter='none';
     if(v.warmth!==0){const warm=Math.max(0,v.warmth),cool=Math.max(0,-v.warmth);if(warm){octx.globalCompositeOperation='soft-light';octx.fillStyle=`rgba(255,186,130,${warm/110})`;octx.fillRect(0,0,w,h);}if(cool){octx.globalCompositeOperation='soft-light';octx.fillStyle=`rgba(120,188,255,${cool/120})`;octx.fillRect(0,0,w,h);}octx.globalCompositeOperation='source-over';}
     if(currentPreset==='bloom'){octx.globalCompositeOperation='soft-light';const g=octx.createLinearGradient(0,0,w,h);g.addColorStop(0,'rgba(255,214,214,.13)');g.addColorStop(1,'rgba(255,240,200,.12)');octx.fillStyle=g;octx.fillRect(0,0,w,h);octx.globalCompositeOperation='source-over';}
-    else if(currentPreset==='winter'){octx.globalCompositeOperation='soft-light';const g=octx.createLinearGradient(0,0,w,h);g.addColorStop(0,'rgba(184,214,242,.14)');g.addColorStop(.52,'rgba(202,219,241,.11)');g.addColorStop(1,'rgba(222,226,239,.08)');octx.fillStyle=g;octx.fillRect(0,0,w,h);octx.globalCompositeOperation='screen';octx.fillStyle='rgba(205,224,246,.035)';octx.fillRect(0,0,w,h);octx.globalCompositeOperation='source-over';}
+    else if(currentPreset==='winter'){octx.globalCompositeOperation='soft-light';const g=octx.createLinearGradient(0,0,w,h);g.addColorStop(0,'rgba(168,208,248,.18)');g.addColorStop(.52,'rgba(188,215,248,.15)');g.addColorStop(1,'rgba(214,225,245,.10)');octx.fillStyle=g;octx.fillRect(0,0,w,h);octx.globalCompositeOperation='screen';octx.fillStyle='rgba(196,222,255,.045)';octx.fillRect(0,0,w,h);octx.globalCompositeOperation='source-over';}
     else if(currentPreset==='wooton'){octx.globalCompositeOperation='soft-light';const g=octx.createLinearGradient(0,0,w,h);g.addColorStop(0,'rgba(170,92,44,.18)');g.addColorStop(.48,'rgba(218,132,62,.14)');g.addColorStop(1,'rgba(246,191,102,.09)');octx.fillStyle=g;octx.fillRect(0,0,w,h);octx.globalCompositeOperation='multiply';octx.fillStyle='rgba(126,80,48,.035)';octx.fillRect(0,0,w,h);octx.globalCompositeOperation='source-over';}
-    else if(currentPreset==='sakura'){octx.globalCompositeOperation='soft-light';const g=octx.createLinearGradient(0,0,w,h);g.addColorStop(0,'rgba(247,184,190,.16)');g.addColorStop(.52,'rgba(244,203,198,.13)');g.addColorStop(1,'rgba(239,220,208,.09)');octx.fillStyle=g;octx.fillRect(0,0,w,h);octx.globalCompositeOperation='screen';octx.fillStyle='rgba(255,236,236,.055)';octx.fillRect(0,0,w,h);octx.globalCompositeOperation='source-over';}
+    else if(currentPreset==='sakura'){octx.globalCompositeOperation='soft-light';const g=octx.createLinearGradient(0,0,w,h);g.addColorStop(0,'rgba(252,174,196,.20)');g.addColorStop(.52,'rgba(250,196,212,.16)');g.addColorStop(1,'rgba(244,218,226,.10)');octx.fillStyle=g;octx.fillRect(0,0,w,h);octx.globalCompositeOperation='screen';octx.fillStyle='rgba(255,232,242,.07)';octx.fillRect(0,0,w,h);octx.globalCompositeOperation='source-over';}
     else if(currentPreset==='glow'){octx.globalCompositeOperation='screen';octx.fillStyle='rgba(255,255,255,.10)';octx.fillRect(0,0,w,h);octx.globalCompositeOperation='source-over';}
     else if(currentPreset==='clear'){octx.globalCompositeOperation='source-over';}
     if(v.glow>0){const glow=offscreen(w,h),gctx=glow.getContext('2d');gctx.filter=`blur(${Math.max(2,v.glow*.7)}px)`;gctx.drawImage(out,0,0);octx.globalCompositeOperation='screen';octx.globalAlpha=Math.min(.48,v.glow/90);octx.drawImage(glow,0,0);octx.globalAlpha=1;octx.globalCompositeOperation='source-over';}
