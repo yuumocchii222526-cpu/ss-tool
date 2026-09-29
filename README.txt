@@ -1,4 +1,4 @@
-FF14 Photo Studio v39
+Palette Studio
 
 - Clear Blue (B) design
 - Background blur / correction brush

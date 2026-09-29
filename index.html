@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- FF14 Photo Studio v39 - Clear Blue Theme / iPhone controls fixed -->
+<!-- Palette Studio - Clear Blue Theme / iPhone controls fixed -->
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
@@ -8,7 +8,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>FF14 Photo Studio</title>
+<title>Palette Studio</title>
 <style>
 
 :root{
@@ -157,13 +157,13 @@ button:disabled{opacity:.55;cursor:not-allowed}
 <body>
 <div class="app">
 <header>
-  <h1>FF14 Photo Studio</h1>
+  <h1>Palette Studio</h1>
 </header>
 <div class="layout">
   <section>
     <div class="card stage-empty" id="pickerCard">
       <label class="file-label" for="fileInput">画像を選ぶ</label>
-      <div class="status" id="status">JPEG / PNG / HEIC 読み込み対応（HEIC は環境により読めない場合あり）｜v39</div>
+      <div class="status" id="status">JPEG / PNG / HEIC 読み込み対応（HEIC は環境により読めない場合あり）</div>
     </div>
     <div class="canvas-wrap" id="canvasWrap"><canvas id="canvas"></canvas>
         <canvas id="maskPaintCanvas"></canvas>
@@ -252,7 +252,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
       <div class="row" style="align-items:flex-start;"><span style="padding-top:10px;">保存形式</span><select id="saveFormat" aria-label="保存形式"><option value="png">PNG（きれい・おすすめ）</option><option value="jpeg">JPEG（軽量）</option></select></div>
       <div class="row" style="align-items:flex-start;"><span style="padding-top:10px;">保存サイズ</span><select id="saveSize" aria-label="保存サイズ"><option value="original">元画像サイズ</option><option value="2560">長辺2560px</option><option value="2048">長辺2048px</option></select></div>
       <div class="row" id="jpegQualityRow" style="display:none;"><span>JPEG品質</span><input id="jpegQuality" type="range" min="70" max="100" value="92"><output id="jpegQualityOut">92</output></div>
-      <div class="row" style="align-items:flex-start;"><span style="padding-top:10px;">ファイル名</span><input id="saveFileName" class="text-input" type="text" value="ff14_photo_studio" maxlength="48" autocomplete="off" spellcheck="false"></div>
+      <div class="row" style="align-items:flex-start;"><span style="padding-top:10px;">ファイル名</span><input id="saveFileName" class="text-input" type="text" value="palette_studio" maxlength="48" autocomplete="off" spellcheck="false"></div>
       <button class="btn" id="btnSave" style="margin-top:12px;">PNGを端末に保存</button>
       <button class="btn secondary" id="btnShare" style="margin-top:8px;">共有メニューを開く</button>
       <div class="save-status" id="saveStatus">端末へ直接保存する時は「端末に保存」。iPhoneで写真アプリへ入れたい時は「共有メニューを開く」→「画像を保存」が便利です。</div>
@@ -1065,11 +1065,11 @@ button:disabled{opacity:.55;cursor:not-allowed}
   }
 
   function sanitizeFileName(name){
-    const cleaned=(name||'ff14_photo_studio')
+    const cleaned=(name||'palette_studio')
       .replace(/[\\/:*?\"<>|]+/g,'_')
       .replace(/^\.+|\.+$/g,'')
       .trim();
-    return cleaned || 'ff14_photo_studio';
+    return cleaned || 'palette_studio';
   }
 
   function getExportSpec(){
@@ -1197,7 +1197,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
       const {blob,spec}=await exportImage();
       const file=new File([blob],spec.fileName,{type:spec.mime});
       if(navigator.share && (!navigator.canShare || navigator.canShare({files:[file]}))){
-        await navigator.share({files:[file],title:'FF14 Photo Studio'});
+        await navigator.share({files:[file],title:'Palette Studio'});
         setSaveStatus('共有メニューを開きました。iPhoneでは「画像を保存」を選ぶと写真アプリに入れられます。');
         showToast('共有メニューを開きました。','success');
       }else{
