@@ -188,13 +188,15 @@ button:disabled{opacity:.55;cursor:not-allowed}
   <aside class="panel" id="panel" style="display:none;">
     <div class="group collapsible open" id="blurGroup">
       <button class="group-toggle" type="button" data-group-toggle aria-expanded="true" aria-controls="blurGroupBody">
-        <span class="group-toggle-main"><span class="group-toggle-title">背景ぼかし</span><span class="group-toggle-sub">人物判定 / 補正ブラシ</span></span>
+        <span class="group-toggle-main"><span class="group-toggle-title">背景ぼかし</span><span class="group-toggle-sub">人物判定 / 被写界深度 / 補正ブラシ</span></span>
         <span class="group-chevron">⌃</span>
       </button>
       <div class="group-body" id="blurGroupBody">
       <p class="mini">人物を自動判定して、背景にだけぼかしをかけます。初回だけ判定モデルを読み込むためネット接続が必要です。</p>
       <label class="check"><input type="checkbox" id="blurOn" checked> 背景ぼかしを使う</label>
       <div class="row"><span>ぼかしの強さ</span><input id="blurStrength" type="range" min="2" max="30" value="12"><output id="blurStrengthOut">12</output></div>
+      <div class="row"><span>被写界深度</span><input id="depthOfField" type="range" min="0" max="100" value="0"><output id="depthOfFieldOut">0</output></div>
+      <p class="mini" style="margin-top:6px;">0は今まで通り背景全体を均一にぼかします。数値を上げるほど人物の近くは鮮明さを残し、離れた背景ほど強くぼける見え方になります。</p>
       <label class="check"><input type="checkbox" id="correctionOn"> 補正ブラシを使う</label>
       <div class="small-actions">
         <button type="button" id="restoreBtn" class="active">鮮明に戻す</button>
@@ -283,7 +285,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
   const processingOverlay=$('processingOverlay'), overlayText=$('overlayText'), overlaySub=$('overlaySub');
   const stickySavebar=$('stickySavebar'), btnSaveSticky=$('btnSaveSticky'), btnShareSticky=$('btnShareSticky');
   const toastEl=$('toast'), toastText=$('toastText');
-  const sliderIds=['blurStrength','brushSize','filterStrength','bright','sat','contrast','warmth','glow','subjectPop','copyrightOffsetX','copyrightOffsetY','copyrightScale','copyrightOpacity'];
+  const sliderIds=['blurStrength','depthOfField','brushSize','filterStrength','bright','sat','contrast','warmth','glow','subjectPop','copyrightOffsetX','copyrightOffsetY','copyrightScale','copyrightOpacity'];
   sliderIds.forEach(id=>{const el=$(id), out=$(id+'Out'); out.textContent=el.value; el.addEventListener('input',()=>out.textContent=el.value);});
 
   let fullImg=null, fullW=0, fullH=0, workW=0, workH=0, srcCanvas=null;
@@ -314,6 +316,8 @@ button:disabled{opacity:.55;cursor:not-allowed}
   let previewSourceCache=null;
   let maskRevision=0;
   const effectiveMaskCache=new Map();
+  let depthMaskCacheKey='';
+  let depthMaskCacheValue=null;
   let renderScheduled=false;
   let pendingRenderMode='full';
   let settleRenderTimer=0;
@@ -372,6 +376,8 @@ button:disabled{opacity:.55;cursor:not-allowed}
   function bumpMaskRevision(){
     maskRevision++;
     effectiveMaskCache.clear();
+    depthMaskCacheKey='';
+    depthMaskCacheValue=null;
   }
 
   function getPreviewSize(){
@@ -573,6 +579,65 @@ button:disabled{opacity:.55;cursor:not-allowed}
     return out;
   }
 
+
+  // 疑似的な被写界深度マスク。
+  // AIの距離推定ではなく、人物マスクからの画面上の距離を使い、
+  // 人物に近い背景ほどピントを残し、離れた背景ほど強くぼかす。
+  function buildDepthFarMask(backgroundMask,w,h,depth){
+    const d=clamp01(depth);
+    if(!backgroundMask || d<=0.001) return backgroundMask;
+
+    const depthStep=Math.round(d*100);
+    const cacheKey=`${maskRevision}:${w}x${h}:${depthStep}`;
+    if(depthMaskCacheKey===cacheKey && depthMaskCacheValue) return depthMaskCacheValue;
+
+    // 大きな画像でもiPhoneで重くなりすぎないよう、保護帯は小さいマスクで作る。
+    const maxSide=520;
+    const scale=Math.min(1,maxSide/Math.max(w,h));
+    const sw=Math.max(2,Math.round(w*scale));
+    const sh=Math.max(2,Math.round(h*scale));
+
+    const bgSmall=offscreen(sw,sh), bgctx=bgSmall.getContext('2d');
+    bgctx.imageSmoothingEnabled=true;
+    if('imageSmoothingQuality' in bgctx) bgctx.imageSmoothingQuality='medium';
+    bgctx.drawImage(backgroundMask,0,0,w,h,0,0,sw,sh);
+
+    const subjectSmall=subjectMaskFromBackgroundMask(bgSmall,sw,sh);
+    const protectSmall=offscreen(sw,sh), pctx=protectSmall.getContext('2d');
+
+    // 深くするほどピントが残る帯を広げる。
+    const fullRadius=Math.max(w,h)*(0.018 + d*0.115);
+    const smallRadius=Math.max(2.5,Math.min(54,fullRadius*scale));
+    pctx.filter=`blur(${smallRadius}px)`;
+    pctx.drawImage(subjectSmall,0,0,sw,sh);
+    pctx.filter='none';
+
+    // ガウスぼかしの薄い裾まで使って、境界をなだらかにする。
+    const img=pctx.getImageData(0,0,sw,sh), px=img.data;
+    const thresholdHigh=0.23 - d*0.055;
+    for(let i=0;i<px.length;i+=4){
+      const a=px[i+3]/255;
+      const protect=smoothstep(0.006,Math.max(0.09,thresholdHigh),a);
+      px[i]=255;px[i+1]=255;px[i+2]=255;px[i+3]=Math.round(protect*255);
+    }
+    pctx.putImageData(img,0,0);
+
+    const protectFull=offscreen(w,h), pfctx=protectFull.getContext('2d');
+    pfctx.imageSmoothingEnabled=true;
+    if('imageSmoothingQuality' in pfctx) pfctx.imageSmoothingQuality='high';
+    pfctx.drawImage(protectSmall,0,0,sw,sh,0,0,w,h);
+
+    const far=offscreen(w,h), fctx=far.getContext('2d');
+    fctx.drawImage(backgroundMask,0,0,w,h);
+    fctx.globalCompositeOperation='destination-out';
+    fctx.drawImage(protectFull,0,0,w,h);
+    fctx.globalCompositeOperation='source-over';
+
+    depthMaskCacheKey=cacheKey;
+    depthMaskCacheValue=far;
+    return far;
+  }
+
   function sharpenCanvas(source,w,h,amount){
     const srcC=offscreen(w,h);
     const sctx=srcC.getContext('2d');
@@ -660,6 +725,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
       warmth:effective.warmth,
       glow:effective.glow,
       blur:+$('blurStrength').value,
+      depth:+$('depthOfField').value/100,
       subjectPop:effective.subjectPop
     };
   }
@@ -776,18 +842,41 @@ button:disabled{opacity:.55;cursor:not-allowed}
     let out=filtered;
 
     if($('blurOn').checked && mask){
-      const blurred=buildScaleBlur(filtered,w,h,v.blur);
-      const blurLayer=offscreen(w,h);
-      const bctx=blurLayer.getContext('2d');
-      bctx.drawImage(blurred,0,0);
-      bctx.globalCompositeOperation='destination-in';
-      bctx.drawImage(mask,0,0,w,h);
-      bctx.globalCompositeOperation='source-over';
-
       const merged=offscreen(w,h);
       const mctx=merged.getContext('2d');
       mctx.drawImage(filtered,0,0);
-      mctx.drawImage(blurLayer,0,0);
+
+      if(v.depth<=0.001){
+        // 0は従来と完全に同じ「背景全体を均一にぼかす」動作。
+        const blurred=buildScaleBlur(filtered,w,h,v.blur);
+        const blurLayer=offscreen(w,h);
+        const bctx=blurLayer.getContext('2d');
+        bctx.drawImage(blurred,0,0);
+        bctx.globalCompositeOperation='destination-in';
+        bctx.drawImage(mask,0,0,w,h);
+        bctx.globalCompositeOperation='source-over';
+        mctx.drawImage(blurLayer,0,0);
+      }else{
+        // 人物の近くは弱いぼかし、離れた背景は元の強さのぼかしにする。
+        const nearFactor=Math.max(0.10,0.74 - v.depth*0.64);
+        const nearRadius=Math.max(0.8,v.blur*nearFactor);
+        const nearBlur=buildScaleBlur(filtered,w,h,nearRadius);
+        const nearLayer=offscreen(w,h), nctx=nearLayer.getContext('2d');
+        nctx.drawImage(nearBlur,0,0);
+        nctx.globalCompositeOperation='destination-in';
+        nctx.drawImage(mask,0,0,w,h);
+        nctx.globalCompositeOperation='source-over';
+        mctx.drawImage(nearLayer,0,0);
+
+        const farMask=buildDepthFarMask(mask,w,h,v.depth);
+        const farBlur=buildScaleBlur(filtered,w,h,v.blur);
+        const farLayer=offscreen(w,h), fctx=farLayer.getContext('2d');
+        fctx.drawImage(farBlur,0,0);
+        fctx.globalCompositeOperation='destination-in';
+        fctx.drawImage(farMask,0,0,w,h);
+        fctx.globalCompositeOperation='source-over';
+        mctx.drawImage(farLayer,0,0);
+      }
       out=merged;
     }
 

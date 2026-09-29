@@ -7,3 +7,5 @@ Palette Studio
 - No round-bokeh feature
 
 GitHub Pages: place index.html at the repository root.
+
+- Depth-of-field control: 0 keeps the original uniform background blur; higher values keep more focus near the subject and apply stronger blur farther away.
