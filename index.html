@@ -196,7 +196,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
       <label class="check"><input type="checkbox" id="blurOn" checked> 背景ぼかしを使う</label>
       <div class="row"><span>ぼかしの強さ</span><input id="blurStrength" type="range" min="2" max="30" value="12"><output id="blurStrengthOut">12</output></div>
       <div class="row"><span>被写界深度</span><input id="depthOfField" type="range" min="0" max="100" value="0"><output id="depthOfFieldOut">0</output></div>
-      <p class="mini" style="margin-top:6px;">0は今まで通り背景全体を均一にぼかします。数値を上げるほど人物の近くは鮮明さを残し、離れた背景ほど強くぼける見え方になります。</p>
+      <p class="mini" style="margin-top:6px;">0は今まで通り背景全体を均一にぼかします。数値を上げるほど人物のすぐ近くは鮮明さを残し、離れた背景ほど強くぼける見え方になります。</p>
       <label class="check"><input type="checkbox" id="correctionOn"> 補正ブラシを使う</label>
       <div class="small-actions">
         <button type="button" id="restoreBtn" class="active">鮮明に戻す</button>
@@ -592,7 +592,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
     if(depthMaskCacheKey===cacheKey && depthMaskCacheValue) return depthMaskCacheValue;
 
     // 大きな画像でもiPhoneで重くなりすぎないよう、保護帯は小さいマスクで作る。
-    const maxSide=520;
+    const maxSide=560;
     const scale=Math.min(1,maxSide/Math.max(w,h));
     const sw=Math.max(2,Math.round(w*scale));
     const sh=Math.max(2,Math.round(h*scale));
@@ -603,21 +603,26 @@ button:disabled{opacity:.55;cursor:not-allowed}
     bgctx.drawImage(backgroundMask,0,0,w,h,0,0,sw,sh);
 
     const subjectSmall=subjectMaskFromBackgroundMask(bgSmall,sw,sh);
+
+    // 人物の周囲を今までより広めに保護し、
+    // 被写界深度を上げたときに「人物の近くの背景」までぼけにくくする。
+    const expandedRadius=Math.max(1,Math.round((Math.max(w,h)*(0.006 + d*0.018))*scale));
+    const expandedSubject=expandAlphaMask(subjectSmall,sw,sh,expandedRadius);
     const protectSmall=offscreen(sw,sh), pctx=protectSmall.getContext('2d');
 
     // 深くするほどピントが残る帯を広げる。
-    const fullRadius=Math.max(w,h)*(0.018 + d*0.115);
-    const smallRadius=Math.max(2.5,Math.min(54,fullRadius*scale));
+    const fullRadius=Math.max(w,h)*(0.030 + d*0.165);
+    const smallRadius=Math.max(4,Math.min(76,fullRadius*scale));
     pctx.filter=`blur(${smallRadius}px)`;
-    pctx.drawImage(subjectSmall,0,0,sw,sh);
+    pctx.drawImage(expandedSubject,0,0,sw,sh);
     pctx.filter='none';
 
     // ガウスぼかしの薄い裾まで使って、境界をなだらかにする。
     const img=pctx.getImageData(0,0,sw,sh), px=img.data;
-    const thresholdHigh=0.23 - d*0.055;
+    const thresholdHigh=Math.max(0.07,0.19 - d*0.075);
     for(let i=0;i<px.length;i+=4){
       const a=px[i+3]/255;
-      const protect=smoothstep(0.006,Math.max(0.09,thresholdHigh),a);
+      const protect=smoothstep(0.004,thresholdHigh,a);
       px[i]=255;px[i+1]=255;px[i+2]=255;px[i+3]=Math.round(protect*255);
     }
     pctx.putImageData(img,0,0);
@@ -632,6 +637,17 @@ button:disabled{opacity:.55;cursor:not-allowed}
     fctx.globalCompositeOperation='destination-out';
     fctx.drawImage(protectFull,0,0,w,h);
     fctx.globalCompositeOperation='source-over';
+
+    // 人物付近の背景が完全にぼけ側へ流れ込みにくいよう、
+    // 0に近い薄いアルファは切り落として far 領域を整理する。
+    const farImg=fctx.getImageData(0,0,w,h), fd=farImg.data;
+    for(let i=0;i<fd.length;i+=4){
+      const a=fd[i+3]/255;
+      let na=smoothstep(0.018,0.98,a);
+      if(na<0.008) na=0;
+      fd[i]=255; fd[i+1]=255; fd[i+2]=255; fd[i+3]=Math.round(na*255);
+    }
+    fctx.putImageData(farImg,0,0);
 
     depthMaskCacheKey=cacheKey;
     depthMaskCacheValue=far;
@@ -857,16 +873,20 @@ button:disabled{opacity:.55;cursor:not-allowed}
         bctx.globalCompositeOperation='source-over';
         mctx.drawImage(blurLayer,0,0);
       }else{
-        // 人物の近くは弱いぼかし、離れた背景は元の強さのぼかしにする。
-        const nearFactor=Math.max(0.10,0.74 - v.depth*0.64);
-        const nearRadius=Math.max(0.8,v.blur*nearFactor);
-        const nearBlur=buildScaleBlur(filtered,w,h,nearRadius);
-        const nearLayer=offscreen(w,h), nctx=nearLayer.getContext('2d');
-        nctx.drawImage(nearBlur,0,0);
-        nctx.globalCompositeOperation='destination-in';
-        nctx.drawImage(mask,0,0,w,h);
-        nctx.globalCompositeOperation='source-over';
-        mctx.drawImage(nearLayer,0,0);
+        // 人物の近くは「できるだけ元画像のまま」残し、
+        // 離れた背景だけを強くぼかす。
+        // これで人物のすぐ近くまでぼけが乗りにくくなる。
+        const baseFactor=Math.max(0,0.42 - v.depth*0.42);
+        const baseRadius=v.blur*baseFactor;
+        if(baseRadius>=0.35){
+          const baseBlur=buildScaleBlur(filtered,w,h,baseRadius);
+          const baseLayer=offscreen(w,h), bctx=baseLayer.getContext('2d');
+          bctx.drawImage(baseBlur,0,0);
+          bctx.globalCompositeOperation='destination-in';
+          bctx.drawImage(mask,0,0,w,h);
+          bctx.globalCompositeOperation='source-over';
+          mctx.drawImage(baseLayer,0,0);
+        }
 
         const farMask=buildDepthFarMask(mask,w,h,v.depth);
         const farBlur=buildScaleBlur(filtered,w,h,v.blur);
