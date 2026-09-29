@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- FF14 Photo Studio v30 -->
+<!-- FF14 Photo Studio v33 -->
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
@@ -137,7 +137,7 @@ input[type=range]{flex:1;accent-color:var(--accent);height:34px;touch-action:pan
       <div class="row"><span>ぼかしの強さ</span><input id="blurStrength" type="range" min="2" max="30" value="12"><output id="blurStrengthOut">12</output></div>
       <div class="row" style="align-items:flex-start;"><span style="padding-top:10px;">ぼけ形状</span><select id="bokehShape" aria-label="ぼけ形状"><option value="none" selected>なし</option><option value="circle">丸ぼけ</option></select></div>
       <div class="row" id="bokehAmountRow" style="display:none;"><span>丸ぼけ量</span><input id="bokehAmount" type="range" min="0" max="100" value="38"><output id="bokehAmountOut">38</output></div>
-      <p class="mini" style="margin-top:10px;">「丸ぼけ」は背景側だけにやわらかい玉ぼけ感を足す軽量版です。まずは自然に使いやすい丸ぼけだけを追加しています。</p>
+      <p class="mini" style="margin-top:10px;">「丸ぼけ」は背景になじむ白〜淡いクリーム色の玉ぼけを足す軽量版です。輪郭をやわらかくして、人物の近くには乗りにくい自然寄りの見え方に調整しています。</p>
       <label class="check"><input type="checkbox" id="correctionOn"> 補正ブラシを使う</label>
       <div class="small-actions">
         <button type="button" id="restoreBtn" class="active">鮮明に戻す</button>
@@ -534,28 +534,45 @@ input[type=range]{flex:1;accent-color:var(--accent);height:34px;touch-action:pan
     const maskCtx=backgroundMask.getContext('2d');
     const maskData=maskCtx.getImageData(0,0,w,h).data;
     const minSide=Math.min(w,h);
-    const baseRadius=Math.max(16, minSide*(0.028 + (blurStrength/30)*0.018));
-    const targetCount=Math.max(6, Math.min(28, Math.round(6 + amount*0.17 + blurStrength*0.55)));
+    const baseRadius=Math.max(18, minSide*(0.020 + (blurStrength/30)*0.018 + (amount/100)*0.010));
+    const targetCount=Math.max(5, Math.min(18, Math.round(5 + amount*0.10 + blurStrength*0.22)));
     const rand=mulberry32((((w*73856093) ^ (h*19349663) ^ ((maskRevision+1)*83492791) ^ (amount<<7) ^ (blurStrength<<3)) >>> 0));
     const placed=[];
     let count=0;
     let tries=0;
-    const maxTries=targetCount*14;
+    const maxTries=targetCount*22;
+
+    function maskAlphaAt(px,py){
+      const sx=Math.max(0,Math.min(w-1,Math.round(px)));
+      const sy=Math.max(0,Math.min(h-1,Math.round(py)));
+      return maskData[(sy*w+sx)*4+3]/255;
+    }
+
+    function safeBackgroundScore(px,py,radius){
+      const step=Math.max(10, radius*0.45);
+      const samples=[
+        [0,0],[step,0],[-step,0],[0,step],[0,-step],
+        [step*0.7,step*0.7],[-step*0.7,step*0.7],[step*0.7,-step*0.7],[-step*0.7,-step*0.7]
+      ];
+      let sum=0;
+      for(const [dx,dy] of samples) sum += maskAlphaAt(px+dx,py+dy);
+      return sum / samples.length;
+    }
 
     while(count<targetCount && tries<maxTries){
       tries++;
       const x=rand()*w;
-      const y=rand()*h;
-      const sx=Math.max(0,Math.min(w-1,Math.round(x)));
-      const sy=Math.max(0,Math.min(h-1,Math.round(y)));
-      const alpha=maskData[(sy*w+sx)*4+3]/255;
-      if(alpha<0.58) continue;
+      const y=Math.pow(rand(),0.92)*h;
+      const largeChance=rand()>0.72;
+      const radius=baseRadius*(largeChance ? (1.35 + rand()*0.85) : (0.78 + rand()*0.65));
+      const centerAlpha=maskAlphaAt(x,y);
+      const bgScore=safeBackgroundScore(x,y,radius);
+      if(centerAlpha<0.84 || bgScore<0.88) continue;
 
-      const radius=baseRadius*(0.72 + rand()*1.08);
       let tooClose=false;
       for(const p of placed){
         const dx=x-p.x, dy=y-p.y;
-        const limit=(radius+p.r)*0.48;
+        const limit=(radius+p.r)*(largeChance ? 0.42 : 0.36);
         if((dx*dx + dy*dy) < limit*limit){
           tooClose=true;
           break;
@@ -564,24 +581,30 @@ input[type=range]{flex:1;accent-color:var(--accent);height:34px;touch-action:pan
       if(tooClose) continue;
       placed.push({x,y,r:radius});
 
-      const glowAlpha=(0.09 + (amount/100)*0.14) * (0.78 + rand()*0.62);
-      const red=244 + Math.round(rand()*11);
-      const green=232 + Math.round(rand()*16);
-      const blue=216 + Math.round(rand()*24);
+      const tintMix=rand();
+      const red=Math.round(248 + tintMix*7);
+      const green=Math.round(241 + tintMix*8);
+      const blue=Math.round(232 + tintMix*12);
+      const glowAlpha=(0.055 + (amount/100)*0.08) * (largeChance ? 0.92 : 1.05) * (0.86 + rand()*0.34);
+      const innerAlpha=Math.min(0.18, glowAlpha*(largeChance ? 1.1 : 1.25));
+      const midAlpha=glowAlpha;
+      const outerAlpha=glowAlpha*0.18;
+
       const grad=octx.createRadialGradient(x,y,0,x,y,radius);
-      grad.addColorStop(0, `rgba(255,255,255,${Math.min(0.34, glowAlpha*1.18)})`);
-      grad.addColorStop(0.33, `rgba(${red},${green},${blue},${glowAlpha})`);
-      grad.addColorStop(0.72, `rgba(${red},${green},${blue},${glowAlpha*0.28})`);
+      grad.addColorStop(0, `rgba(255,255,255,${innerAlpha})`);
+      grad.addColorStop(0.22, `rgba(255,250,244,${Math.min(0.16, innerAlpha*0.92)})`);
+      grad.addColorStop(0.52, `rgba(${red},${green},${blue},${midAlpha})`);
+      grad.addColorStop(0.82, `rgba(${red},${green},${blue},${outerAlpha})`);
       grad.addColorStop(1, 'rgba(255,255,255,0)');
       octx.fillStyle=grad;
       octx.beginPath();
       octx.arc(x,y,radius,0,Math.PI*2);
       octx.fill();
 
-      if(rand()>0.42){
-        const coreR=radius*(0.14 + rand()*0.10);
+      if(rand()>0.58){
+        const coreR=radius*(0.11 + rand()*0.08);
         const core=octx.createRadialGradient(x,y,0,x,y,coreR);
-        const coreAlpha=Math.min(0.26, glowAlpha*0.7);
+        const coreAlpha=Math.min(0.11, glowAlpha*0.62);
         core.addColorStop(0, `rgba(255,255,255,${coreAlpha})`);
         core.addColorStop(1, 'rgba(255,255,255,0)');
         octx.fillStyle=core;
@@ -592,9 +615,8 @@ input[type=range]{flex:1;accent-color:var(--accent);height:34px;touch-action:pan
       count++;
     }
 
-    // 全体を少しやわらげる
     const softened=offscreen(w,h), sctx=softened.getContext('2d');
-    sctx.filter='blur(1.2px)';
+    sctx.filter='blur(2.4px)';
     sctx.drawImage(out,0,0,w,h);
     sctx.filter='none';
     sctx.globalCompositeOperation='destination-in';
@@ -703,7 +725,7 @@ input[type=range]{flex:1;accent-color:var(--accent);height:34px;touch-action:pan
         const bokeh=buildRoundBokehOverlay(w,h,mask,v.bokehAmount,v.blur);
         if(bokeh){
           bctx.globalCompositeOperation='screen';
-          bctx.globalAlpha=Math.min(0.95,0.58 + v.bokehAmount/220);
+          bctx.globalAlpha=Math.min(0.82,0.40 + v.bokehAmount/260);
           bctx.drawImage(bokeh,0,0);
           bctx.globalAlpha=1;
           bctx.globalCompositeOperation='source-over';
