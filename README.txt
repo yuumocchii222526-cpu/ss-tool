@@ -1,9 +1,11 @@
-FF14 Photo Studio v25
+FF14 Photo Studio v27
 
 変更点
-- Dream フィルタを削除
-- Winter フィルタを追加（青白く透明感のある冬向け）
-- Spring フィルタを追加（淡い桜色・やわらかな春向け）
-- Amber は v24 の調整を維持
+- Wooton フィルタを追加：参考画像の「ウートン」風の濃いブラウン〜オレンジ系
+- Sakura フィルタを追加：参考画像の「さくら」風の淡いピンク・低コントラスト系
+- 色味が近かった Amber を削除（Wooton に統合）
+- 色味が近かった Spring を削除（Sakura に統合）
+- Winter は Mizuiro / Haiiro 参考の淡い青灰色・透明感寄りを維持
+- Glow / Bloom / Clear は維持
 
-GitHub Pages では index.html をそのまま公開できます。
+GitHub Pages では、このZIPを展開して index.html をルートに置いてください。

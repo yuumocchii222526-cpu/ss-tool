@@ -146,7 +146,7 @@ input[type=range]{flex:1;accent-color:var(--accent);height:34px;touch-action:pan
 
     <div class="group collapsible open" id="filterGroup">
       <button class="group-toggle" type="button" data-group-toggle aria-expanded="true" aria-controls="filterGroupBody">
-        <span class="group-toggle-main"><span class="group-toggle-title">GShade風フィルタ</span><span class="group-toggle-sub">Glow / Bloom / Clear / Amber / Winter / Spring</span></span>
+        <span class="group-toggle-main"><span class="group-toggle-title">GShade風フィルタ</span><span class="group-toggle-sub">Glow / Bloom / Clear / Winter / Wooton / Sakura</span></span>
         <span class="group-chevron">⌃</span>
       </button>
       <div class="group-body" id="filterGroupBody">
@@ -154,9 +154,9 @@ input[type=range]{flex:1;accent-color:var(--accent);height:34px;touch-action:pan
         <button data-preset="glow" class="active">Glow</button>
         <button data-preset="bloom">Bloom</button>
         <button data-preset="clear">Clear</button>
-        <button data-preset="amber">Amber</button>
         <button data-preset="winter">Winter</button>
-        <button data-preset="spring">Spring</button>
+        <button data-preset="wooton">Wooton</button>
+        <button data-preset="sakura">Sakura</button>
       </div>
       <div class="preset-actions">
         <button class="btn secondary" type="button" id="btnResetPreset">フィルタを初期値に戻す</button>
@@ -257,9 +257,9 @@ input[type=range]{flex:1;accent-color:var(--accent);height:34px;touch-action:pan
     glow:{bright:110,sat:106,contrast:108,warmth:8,glow:24,subjectPop:16},
     bloom:{bright:114,sat:94,contrast:98,warmth:5,glow:14,subjectPop:10},
     clear:{bright:106,sat:107,contrast:116,warmth:2,glow:4,subjectPop:28},
-    amber:{bright:106,sat:118,contrast:103,warmth:26,glow:17,subjectPop:12},
-    winter:{bright:106,sat:98,contrast:106,warmth:-12,glow:10,subjectPop:18},
-    spring:{bright:111,sat:103,contrast:97,warmth:4,glow:14,subjectPop:10}
+    winter:{bright:109,sat:93,contrast:96,warmth:-10,glow:15,subjectPop:14},
+    wooton:{bright:104,sat:116,contrast:106,warmth:22,glow:13,subjectPop:15},
+    sakura:{bright:111,sat:88,contrast:92,warmth:6,glow:14,subjectPop:10}
   };
   const PRESETS=FILTER_PRESETS;
 
@@ -568,9 +568,9 @@ input[type=range]{flex:1;accent-color:var(--accent);height:34px;touch-action:pan
     octx.drawImage(src,0,0,w,h);octx.filter='none';
     if(v.warmth!==0){const warm=Math.max(0,v.warmth),cool=Math.max(0,-v.warmth);if(warm){octx.globalCompositeOperation='soft-light';octx.fillStyle=`rgba(255,186,130,${warm/110})`;octx.fillRect(0,0,w,h);}if(cool){octx.globalCompositeOperation='soft-light';octx.fillStyle=`rgba(120,188,255,${cool/120})`;octx.fillRect(0,0,w,h);}octx.globalCompositeOperation='source-over';}
     if(currentPreset==='bloom'){octx.globalCompositeOperation='soft-light';const g=octx.createLinearGradient(0,0,w,h);g.addColorStop(0,'rgba(255,214,214,.13)');g.addColorStop(1,'rgba(255,240,200,.12)');octx.fillStyle=g;octx.fillRect(0,0,w,h);octx.globalCompositeOperation='source-over';}
-    else if(currentPreset==='amber'){octx.globalCompositeOperation='soft-light';const g=octx.createLinearGradient(0,0,w,h);g.addColorStop(0,'rgba(255,152,112,.20)');g.addColorStop(.45,'rgba(255,170,104,.12)');g.addColorStop(1,'rgba(255,198,124,.06)');octx.fillStyle=g;octx.fillRect(0,0,w,h);octx.globalCompositeOperation='screen';octx.fillStyle='rgba(255,160,112,.025)';octx.fillRect(0,0,w,h);octx.globalCompositeOperation='source-over';}
-    else if(currentPreset==='winter'){octx.globalCompositeOperation='soft-light';const g=octx.createLinearGradient(0,0,w,h);g.addColorStop(0,'rgba(188,220,255,.13)');g.addColorStop(.55,'rgba(210,230,255,.09)');g.addColorStop(1,'rgba(235,242,255,.06)');octx.fillStyle=g;octx.fillRect(0,0,w,h);octx.globalCompositeOperation='screen';octx.fillStyle='rgba(205,228,255,.025)';octx.fillRect(0,0,w,h);octx.globalCompositeOperation='source-over';}
-    else if(currentPreset==='spring'){octx.globalCompositeOperation='soft-light';const g=octx.createLinearGradient(0,0,w,h);g.addColorStop(0,'rgba(255,198,218,.14)');g.addColorStop(.5,'rgba(255,218,224,.10)');g.addColorStop(1,'rgba(255,238,226,.07)');octx.fillStyle=g;octx.fillRect(0,0,w,h);octx.globalCompositeOperation='screen';octx.fillStyle='rgba(255,225,232,.03)';octx.fillRect(0,0,w,h);octx.globalCompositeOperation='source-over';}
+    else if(currentPreset==='winter'){octx.globalCompositeOperation='soft-light';const g=octx.createLinearGradient(0,0,w,h);g.addColorStop(0,'rgba(184,214,242,.14)');g.addColorStop(.52,'rgba(202,219,241,.11)');g.addColorStop(1,'rgba(222,226,239,.08)');octx.fillStyle=g;octx.fillRect(0,0,w,h);octx.globalCompositeOperation='screen';octx.fillStyle='rgba(205,224,246,.035)';octx.fillRect(0,0,w,h);octx.globalCompositeOperation='source-over';}
+    else if(currentPreset==='wooton'){octx.globalCompositeOperation='soft-light';const g=octx.createLinearGradient(0,0,w,h);g.addColorStop(0,'rgba(170,92,44,.18)');g.addColorStop(.48,'rgba(218,132,62,.14)');g.addColorStop(1,'rgba(246,191,102,.09)');octx.fillStyle=g;octx.fillRect(0,0,w,h);octx.globalCompositeOperation='multiply';octx.fillStyle='rgba(126,80,48,.035)';octx.fillRect(0,0,w,h);octx.globalCompositeOperation='source-over';}
+    else if(currentPreset==='sakura'){octx.globalCompositeOperation='soft-light';const g=octx.createLinearGradient(0,0,w,h);g.addColorStop(0,'rgba(247,184,190,.16)');g.addColorStop(.52,'rgba(244,203,198,.13)');g.addColorStop(1,'rgba(239,220,208,.09)');octx.fillStyle=g;octx.fillRect(0,0,w,h);octx.globalCompositeOperation='screen';octx.fillStyle='rgba(255,236,236,.055)';octx.fillRect(0,0,w,h);octx.globalCompositeOperation='source-over';}
     else if(currentPreset==='glow'){octx.globalCompositeOperation='screen';octx.fillStyle='rgba(255,255,255,.10)';octx.fillRect(0,0,w,h);octx.globalCompositeOperation='source-over';}
     else if(currentPreset==='clear'){octx.globalCompositeOperation='source-over';}
     if(v.glow>0){const glow=offscreen(w,h),gctx=glow.getContext('2d');gctx.filter=`blur(${Math.max(2,v.glow*.7)}px)`;gctx.drawImage(out,0,0);octx.globalCompositeOperation='screen';octx.globalAlpha=Math.min(.48,v.glow/90);octx.drawImage(glow,0,0);octx.globalAlpha=1;octx.globalCompositeOperation='source-over';}
