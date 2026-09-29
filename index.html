@@ -1,0 +1,1279 @@
+<!DOCTYPE html>
+<!-- Palette Studio - Clear Blue Theme / iPhone controls fixed -->
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#edf8ff">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>Palette Studio</title>
+<style>
+
+:root{
+  --bg:#edf8ff;
+  --bg2:#f9fcff;
+  --panel:rgba(255,255,255,.82);
+  --panel2:rgba(244,250,255,.94);
+  --accent:#4d9df6;
+  --accent2:#8ecbff;
+  --accent-deep:#145b9d;
+  --text:#164f82;
+  --text-strong:#104a7d;
+  --dim:#6689a9;
+  --border:rgba(103,174,232,.28);
+  --shadow:0 18px 55px rgba(70,143,202,.14);
+  --soft-shadow:0 8px 28px rgba(70,143,202,.10);
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif;color:var(--text);background:linear-gradient(180deg,#f8fcff 0%,#e9f6ff 48%,#f8fcff 100%)}
+body{min-height:100vh;overflow-x:hidden;position:relative}
+body::before,body::after{content:"";position:fixed;pointer-events:none;z-index:-2;filter:blur(8px)}
+body::before{width:520px;height:520px;left:-230px;top:-150px;background:radial-gradient(circle,rgba(152,216,255,.40),rgba(255,255,255,0) 68%)}
+body::after{width:620px;height:620px;right:-280px;bottom:-220px;background:radial-gradient(circle,rgba(186,224,255,.46),rgba(255,255,255,0) 70%)}
+.app{max-width:900px;margin:0 auto;padding:0 0 48px;position:relative}
+.app::before{content:"✦   ·   ✧";position:absolute;right:20px;top:18px;color:rgba(74,154,226,.23);font-size:19px;letter-spacing:6px;pointer-events:none}
+header{padding:28px 18px 16px;text-align:center;position:relative}
+header::before{content:"◇";display:inline-block;margin-right:10px;color:#69b4ff;font-size:23px;vertical-align:2px;text-shadow:0 0 18px rgba(82,165,244,.35)}
+h1{display:inline;margin:0;font-size:clamp(27px,5vw,40px);letter-spacing:.02em;color:var(--text-strong);font-family:Georgia,"Times New Roman",serif;font-weight:600}
+.sub{max-width:660px;margin:8px auto 0;color:var(--dim);font-size:13px;line-height:1.7}
+.layout{display:grid;grid-template-columns:1fr;gap:14px;padding:6px 16px 0}
+.layout>section,.panel{min-width:0}
+.card,.group,.viewer-tools,.privacy-note{background:var(--panel);border:1px solid rgba(255,255,255,.92);box-shadow:var(--shadow);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
+.card{border-radius:24px;padding:16px;outline:1px solid var(--border)}
+.stage-empty{text-align:center;padding:42px 22px}
+.stage-empty::before{content:"✧";display:block;font-size:34px;color:#72b6f2;margin-bottom:10px}
+.file-label,.btn{display:inline-flex;align-items:center;justify-content:center;width:100%;min-height:48px;padding:12px 16px;border-radius:16px;background:linear-gradient(135deg,#79c9ff 0%,#4b9df7 55%,#3f8ce6 100%);color:#fff;font-weight:700;text-align:center;border:1px solid rgba(255,255,255,.85);font-size:15px;cursor:pointer;box-shadow:0 10px 24px rgba(55,144,224,.22);transition:transform .14s ease,box-shadow .14s ease,filter .14s ease}
+.file-label:active,.btn:active{transform:translateY(1px);filter:saturate(.92)}
+.btn.secondary{background:rgba(255,255,255,.76);color:var(--text-strong);border:1px solid rgba(111,178,231,.32);box-shadow:none}
+.fileInput{display:none}
+.status{margin-top:12px;color:var(--dim);font-size:12px;white-space:pre-wrap;line-height:1.6}
+.canvas-wrap{display:none;position:relative;padding:7px;border-radius:26px;background:rgba(255,255,255,.72);border:1px solid rgba(255,255,255,.96);outline:1px solid rgba(91,169,232,.28);box-shadow:0 22px 65px rgba(50,128,191,.16);overflow:hidden}
+#canvas{display:block;width:100%;height:auto;max-height:76vh;border-radius:20px;background:#dceefe;box-shadow:0 8px 25px rgba(48,119,176,.12)}
+#maskPaintCanvas{position:absolute;inset:7px;width:calc(100% - 14px);height:calc(100% - 14px);border-radius:20px;touch-action:none;pointer-events:none;z-index:5}
+.canvas-wrap.is-correcting #maskPaintCanvas{pointer-events:auto;cursor:crosshair}
+.small-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:10px}
+.small-actions button{min-height:42px;padding:9px 12px;border-radius:14px;border:1px solid rgba(113,181,235,.32);background:rgba(255,255,255,.78);color:var(--text-strong);font-size:12px;font-weight:650;box-shadow:0 5px 14px rgba(85,150,202,.06)}
+.small-actions button.active{background:linear-gradient(135deg,#e7f5ff,#cfeaff);color:#1767ad;border-color:#6ab4ef;box-shadow:0 8px 20px rgba(77,157,246,.16)}
+.panel{padding-bottom:10px}
+.group{padding:0;overflow:hidden;border-radius:22px;outline:1px solid var(--border);margin-bottom:14px;position:relative}
+.group::after{content:"";position:absolute;width:110px;height:110px;right:-42px;bottom:-54px;border-radius:50%;background:radial-gradient(circle,rgba(139,205,255,.14),rgba(255,255,255,0) 70%);pointer-events:none}
+.group h2{margin:0 0 10px;font-size:12px;color:var(--dim);letter-spacing:.04em}
+.row{display:flex;align-items:center;gap:12px;margin:12px 0;font-size:13px;min-height:44px}
+.row span{width:112px;flex:0 0 auto;color:var(--text-strong);font-weight:600}
+.row output{width:46px;text-align:right;color:var(--accent-deep);font-size:12px;font-variant-numeric:tabular-nums}
+input[type=range]{flex:1;min-width:0;accent-color:var(--accent);height:40px;touch-action:auto;-webkit-tap-highlight-color:transparent}
+select,.text-input{width:100%;padding:12px 13px;border-radius:14px;border:1px solid rgba(103,174,232,.30);background:rgba(255,255,255,.86);color:var(--text-strong);font-size:14px;min-width:0;box-shadow:inset 0 1px 0 rgba(255,255,255,.8)}
+select{appearance:auto}
+.save-status{margin-top:10px;color:var(--dim);font-size:11px;line-height:1.6;min-height:1.6em}
+.toggle{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.toggle button{min-height:44px;padding:10px;border-radius:14px;border:1px solid rgba(112,178,230,.28);background:rgba(255,255,255,.76);color:var(--text-strong);font-size:13px;font-weight:650;cursor:pointer}
+.toggle button.active{background:linear-gradient(135deg,#d9efff,#b9ddff);color:#0f5e9f;border-color:#67b0ed;box-shadow:0 7px 16px rgba(67,150,219,.14)}
+.presets{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.presets button{position:relative;padding:0 0 10px;overflow:hidden;border-radius:14px;border:1px solid rgba(103,174,232,.25);background:rgba(255,255,255,.84);color:var(--text-strong);font-size:12px;font-weight:650;cursor:pointer;box-shadow:0 5px 15px rgba(78,145,199,.06)}
+.presets button::before{content:"";display:block;height:48px;margin-bottom:8px;background:linear-gradient(135deg,#edf7ff,#cceaff)}
+.presets button[data-preset="glow"]::before{background:linear-gradient(135deg,#fff4e6,#ffe0ba 44%,#f8c2b9)}
+.presets button[data-preset="bloom"]::before{background:linear-gradient(135deg,#fff0f6,#f8cce1 48%,#f2d7ff)}
+.presets button[data-preset="clear"]::before{background:linear-gradient(135deg,#f8fbff,#dcecf8 48%,#bcdcf1)}
+.presets button[data-preset="winter"]::before{background:linear-gradient(135deg,#ecf8ff,#cce9ff 48%,#b9d7ff)}
+.presets button[data-preset="wooton"]::before{background:linear-gradient(135deg,#f8e6d1,#d9a77e 50%,#9e6b4d)}
+.presets button[data-preset="sakura"]::before{background:linear-gradient(135deg,#fff0f6,#ffc6dc 48%,#f39cc1)}
+.presets button.active{border-color:#4b9ef4;background:#f3faff;color:#0e60a5;box-shadow:0 0 0 2px rgba(78,159,239,.15),0 9px 22px rgba(68,149,214,.14)}
+.check{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--text-strong);margin-top:9px;font-weight:600}
+.check input{accent-color:var(--accent);width:18px;height:18px}
+.mini{font-size:12px;color:var(--dim);line-height:1.65;margin:0 0 10px}
+.badge{display:inline-flex;align-items:center;gap:7px;padding:7px 10px;border-radius:999px;background:rgba(238,248,255,.92);border:1px solid rgba(104,176,232,.25);font-size:11px;color:var(--dim);margin-top:8px}
+.dot{width:7px;height:7px;border-radius:50%;background:#6bd49b;box-shadow:0 0 0 4px rgba(107,212,155,.10)}
+.dot.loading{background:#65aeea;box-shadow:0 0 0 4px rgba(101,174,234,.12)}.dot.error{background:#e78989;box-shadow:none}
+.footer-note{padding:0 18px;margin-top:12px;color:var(--dim);font-size:12px;line-height:1.7;text-align:center}
+.privacy-note{margin:15px 16px 0;padding:16px 17px;border-radius:20px;outline:1px solid var(--border);color:var(--dim);font-size:12px;line-height:1.75;text-align:left}
+.privacy-note strong{color:var(--text-strong)}
+button:disabled{opacity:.55;cursor:not-allowed}
+.viewer-tools{display:none;position:sticky;bottom:calc(82px + env(safe-area-inset-bottom));z-index:9;margin-top:12px;padding:10px;border-radius:20px;outline:1px solid var(--border)}
+.view-toggle{grid-template-columns:1fr 1fr}
+.correction-banner{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;padding:10px 12px;border-radius:14px;background:linear-gradient(135deg,rgba(225,244,255,.95),rgba(245,251,255,.92));border:1px solid rgba(104,176,232,.32);font-size:12px;color:var(--text-strong)}
+.correction-banner strong{color:#1774be}
+.overlay-status{position:absolute;inset:7px;display:flex;align-items:center;justify-content:center;padding:20px;z-index:8;background:rgba(224,242,255,.30);border-radius:20px}
+.overlay-status[hidden]{display:none}
+.overlay-status-box{max-width:min(92%,330px);padding:16px 18px;border-radius:18px;background:rgba(255,255,255,.92);border:1px solid rgba(115,183,236,.32);text-align:center;box-shadow:0 18px 42px rgba(58,131,188,.16);backdrop-filter:blur(14px)}
+.overlay-status-title{font-weight:700;font-size:14px;color:var(--text-strong)}
+.overlay-status-sub{margin-top:6px;font-size:12px;line-height:1.55;color:var(--dim)}
+.group-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:17px 18px;background:transparent;border:none;color:var(--text);cursor:pointer;text-align:left;position:relative;z-index:1}
+.group-toggle-main{display:flex;flex-direction:column;gap:4px}
+.group-toggle-title{font-size:17px;letter-spacing:.01em;color:var(--text-strong);font-weight:750;display:flex;align-items:center;gap:8px}
+.group-toggle-title::before{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:10px;background:linear-gradient(135deg,#dff2ff,#bee3ff);color:#2278bc;font-size:15px;box-shadow:inset 0 0 0 1px rgba(95,169,229,.2)}
+#blurGroup .group-toggle-title::before{content:"✺"}
+#filterGroup .group-toggle-title::before{content:"◉"}
+#saveGroup .group-toggle-title::before{content:"⇩"}
+.group-toggle-sub{font-size:11px;color:var(--dim);padding-left:36px}
+.group-chevron{font-size:19px;color:#3a83be;transform:rotate(0deg);transition:transform .18s ease}
+.group.open .group-chevron{transform:rotate(180deg)}
+.group-body{padding:0 18px 18px;position:relative;z-index:1}
+.group:not(.open) .group-body{display:none}
+.preset-actions{display:flex;gap:8px;margin:12px 0 3px}
+.preset-actions .btn{padding:9px 12px;min-height:42px;font-size:12px}
+.sticky-savebar{display:none;position:fixed;left:0;right:0;bottom:0;z-index:20;padding:10px 14px calc(10px + env(safe-area-inset-bottom));background:rgba(242,250,255,.92);border-top:1px solid rgba(92,165,224,.22);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);box-shadow:0 -10px 30px rgba(74,143,198,.10)}
+.sticky-savebar-inner{max-width:900px;margin:0 auto;display:grid;grid-template-columns:1.15fr .95fr;gap:10px}
+.sticky-savebar .btn{margin:0}
+.save-note{margin-top:9px;font-size:12px;line-height:1.65;color:var(--dim)}
+.toast{position:fixed;left:50%;bottom:110px;z-index:40;transform:translate(-50%,14px);opacity:0;pointer-events:none;transition:opacity .22s ease,transform .22s ease;max-width:min(calc(100vw - 28px),430px)}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.toast-inner{padding:12px 15px;border-radius:15px;background:rgba(19,74,116,.92);border:1px solid rgba(255,255,255,.22);box-shadow:0 18px 42px rgba(43,110,163,.22);backdrop-filter:blur(12px);font-size:13px;line-height:1.55;color:#fff}
+.toast.success .toast-inner{background:rgba(33,132,110,.92)}
+.toast.error .toast-inner{background:rgba(178,82,82,.92)}
+.toast.info .toast-inner{background:rgba(28,91,142,.92)}
+@media (min-width:760px){
+  .layout{padding-left:22px;padding-right:22px;gap:17px}
+  .presets{grid-template-columns:repeat(6,minmax(0,1fr))}
+  .presets button::before{height:58px}
+  .group-body{padding:0 22px 20px}
+  .group-toggle{padding:18px 22px}
+  .row span{width:128px}
+  .viewer-tools{position:static}
+  .sticky-savebar{display:none !important}
+  body{padding-bottom:0}
+}
+@media (max-width:759px){
+  body{padding-bottom:92px}
+  .app{padding-bottom:14px}
+  header{padding-top:24px}
+  h1{font-size:29px}
+  .sub{font-size:12px;padding:0 6px}
+  .layout{gap:12px;padding-left:12px;padding-right:12px}
+  .group-toggle{padding:15px 14px}
+  .group-body{padding:0 14px 16px}
+  .group-toggle-title{font-size:16px}
+  .group-toggle-sub{padding-left:36px}
+  .row{gap:8px}
+  .row span{width:96px;font-size:12px}
+  .presets{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .presets button::before{height:44px}
+  .toast{bottom:104px;max-width:min(calc(100vw - 20px),430px)}
+}
+
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+  <h1>Palette Studio</h1>
+</header>
+<div class="layout">
+  <section>
+    <div class="card stage-empty" id="pickerCard">
+      <label class="file-label" for="fileInput">画像を選ぶ</label>
+      <div class="status" id="status">JPEG / PNG / HEIC 読み込み対応（HEIC は環境により読めない場合あり）</div>
+    </div>
+    <div class="canvas-wrap" id="canvasWrap"><canvas id="canvas"></canvas>
+        <canvas id="maskPaintCanvas"></canvas>
+        <div class="overlay-status" id="processingOverlay" hidden>
+          <div class="overlay-status-box">
+            <div class="overlay-status-title" id="overlayText">処理中…</div>
+            <div class="overlay-status-sub" id="overlaySub">しばらくお待ちください。</div>
+          </div>
+        </div>
+    </div>
+    <div class="viewer-tools" id="viewerTools">
+      <div class="toggle view-toggle">
+        <button id="btnBeforeStage" type="button">加工前</button>
+        <button id="btnAfterStage" type="button" class="active">加工後</button>
+      </div>
+      <div class="correction-banner" id="correctionBanner" style="display:none;">
+        <strong>補正ブラシ ON</strong>
+        <span id="correctionModeLabel">現在: 鮮明に戻す</span>
+      </div>
+    </div>
+  </section>
+  <aside class="panel" id="panel" style="display:none;">
+    <div class="group collapsible open" id="blurGroup">
+      <button class="group-toggle" type="button" data-group-toggle aria-expanded="true" aria-controls="blurGroupBody">
+        <span class="group-toggle-main"><span class="group-toggle-title">背景ぼかし</span><span class="group-toggle-sub">人物判定 / 補正ブラシ</span></span>
+        <span class="group-chevron">⌃</span>
+      </button>
+      <div class="group-body" id="blurGroupBody">
+      <p class="mini">人物を自動判定して、背景にだけぼかしをかけます。初回だけ判定モデルを読み込むためネット接続が必要です。</p>
+      <label class="check"><input type="checkbox" id="blurOn" checked> 背景ぼかしを使う</label>
+      <div class="row"><span>ぼかしの強さ</span><input id="blurStrength" type="range" min="2" max="30" value="12"><output id="blurStrengthOut">12</output></div>
+      <label class="check"><input type="checkbox" id="correctionOn"> 補正ブラシを使う</label>
+      <div class="small-actions">
+        <button type="button" id="restoreBtn" class="active">鮮明に戻す</button>
+        <button type="button" id="addBlurBtn">ぼかしを足す</button>
+      </div>
+      <div class="row"><span>ブラシ太さ</span><input id="brushSize" type="range" min="10" max="120" value="42"><output id="brushSizeOut">42</output></div>
+      <div class="row" style="align-items:flex-start;"><span style="padding-top:10px;">追従性</span><select id="brushTrackingMode" aria-label="ブラシ追従性"><option value="light" selected>軽さ優先</option><option value="precise">精度優先</option></select></div>
+      <button class="btn secondary" type="button" id="clearCorrection" style="margin-top:8px;">補正をリセット</button>
+      <p class="mini" style="margin-top:10px;">自動判定で腕・耳・髪・装飾などがぼけた時は「鮮明に戻す」でその部分をなぞってください。背景側を追加でぼかしたい時は「ぼかしを足す」を使えます。</p>
+      <div class="badge"><span class="dot loading" id="segDot"></span><span id="segStatus">人物判定の準備中</span></div>
+      </div>
+    </div>
+
+    <div class="group collapsible open" id="filterGroup">
+      <button class="group-toggle" type="button" data-group-toggle aria-expanded="true" aria-controls="filterGroupBody">
+        <span class="group-toggle-main"><span class="group-toggle-title">カラーフィルタ</span><span class="group-toggle-sub">Glow / Bloom / Clear / Winter / Wooton / Sakura</span></span>
+        <span class="group-chevron">⌃</span>
+      </button>
+      <div class="group-body" id="filterGroupBody">
+      <div class="presets" id="presetWrap">
+        <button data-preset="glow" class="active">Glow</button>
+        <button data-preset="bloom">Bloom</button>
+        <button data-preset="clear">Clear</button>
+        <button data-preset="winter">Winter</button>
+        <button data-preset="wooton">Wooton</button>
+        <button data-preset="sakura">Sakura</button>
+      </div>
+      <div class="preset-actions">
+        <button class="btn secondary" type="button" id="btnResetPreset">フィルタを初期値に戻す</button>
+      </div>
+      <div class="row"><span>フィルタの強さ</span><input id="filterStrength" type="range" min="0" max="100" value="100"><output id="filterStrengthOut">100</output></div>
+      <div class="row"><span>明るさ</span><input id="bright" type="range" min="70" max="145" value="110"><output id="brightOut">110</output></div>
+      <div class="row"><span>彩度</span><input id="sat" type="range" min="40" max="180" value="106"><output id="satOut">106</output></div>
+      <div class="row"><span>コントラスト</span><input id="contrast" type="range" min="70" max="150" value="108"><output id="contrastOut">108</output></div>
+      <div class="row"><span>暖かさ</span><input id="warmth" type="range" min="-30" max="30" value="8"><output id="warmthOut">8</output></div>
+      <div class="row"><span>ふんわり光</span><input id="glow" type="range" min="0" max="45" value="24"><output id="glowOut">24</output></div>
+      <div class="row"><span>人物くっきり</span><input id="subjectPop" type="range" min="0" max="40" value="16"><output id="subjectPopOut">16</output></div>
+      <p class="mini" style="margin-top:8px;">明るさ・彩度・コントラスト・暖かさなどの手動調整は、フィルタの強さとは別に反映されます。</p>
+      </div>
+    </div>
+
+    <div class="group collapsible open" id="saveGroup">
+      <button class="group-toggle" type="button" data-group-toggle aria-expanded="true" aria-controls="saveGroupBody">
+        <span class="group-toggle-main"><span class="group-toggle-title">書き出し</span><span class="group-toggle-sub">保存 / 共有 / 透かし</span></span>
+        <span class="group-chevron">⌃</span>
+      </button>
+      <div class="group-body" id="saveGroupBody">
+      <label class="check"><input type="checkbox" id="copyrightOn" checked> (C) SQUARE ENIX を入れる</label>
+      <div class="row" style="align-items:flex-start;"><span style="padding-top:10px;">透かしデザイン</span><select id="copyrightStyle" aria-label="透かしデザイン"><option value="soft-panel" selected>半透明プレート</option><option value="white-shadow">白文字＋影</option><option value="white-outline">白文字＋黒縁</option><option value="black-outline">黒文字＋白縁</option><option value="light-panel">白プレート</option></select></div>
+      <div class="row" style="align-items:flex-start;"><span style="padding-top:10px;">透かし位置</span><select id="copyrightPos" aria-label="透かし位置"><option value="bottom-right">右下</option><option value="bottom-left">左下</option><option value="bottom-center">下中央</option><option value="top-right">右上</option><option value="top-left">左上</option><option value="top-center">上中央</option></select></div>
+      <div class="row"><span>左右微調整</span><input id="copyrightOffsetX" type="range" min="-120" max="120" value="0"><output id="copyrightOffsetXOut">0</output></div>
+      <div class="row"><span>上下微調整</span><input id="copyrightOffsetY" type="range" min="-120" max="120" value="0"><output id="copyrightOffsetYOut">0</output></div>
+      <div class="row"><span>透かしサイズ</span><input id="copyrightScale" type="range" min="70" max="170" value="100"><output id="copyrightScaleOut">100</output></div>
+      <div class="row"><span>透かし透明度</span><input id="copyrightOpacity" type="range" min="20" max="100" value="100"><output id="copyrightOpacityOut">100</output></div>
+      <div class="save-note">(C) SQUARE ENIX の文字はそのままで、見え方を5種類から選べます。位置・大きさ・透明度も調整できます。</div>
+      <div class="row" style="align-items:flex-start;"><span style="padding-top:10px;">保存形式</span><select id="saveFormat" aria-label="保存形式"><option value="png">PNG（きれい・おすすめ）</option><option value="jpeg">JPEG（軽量）</option></select></div>
+      <div class="row" style="align-items:flex-start;"><span style="padding-top:10px;">保存サイズ</span><select id="saveSize" aria-label="保存サイズ"><option value="original">元画像サイズ</option><option value="2560">長辺2560px</option><option value="2048">長辺2048px</option></select></div>
+      <div class="row" id="jpegQualityRow" style="display:none;"><span>JPEG品質</span><input id="jpegQuality" type="range" min="70" max="100" value="92"><output id="jpegQualityOut">92</output></div>
+      <div class="row" style="align-items:flex-start;"><span style="padding-top:10px;">ファイル名</span><input id="saveFileName" class="text-input" type="text" value="palette_studio" maxlength="48" autocomplete="off" spellcheck="false"></div>
+      <button class="btn" id="btnSave" style="margin-top:12px;">PNGを端末に保存</button>
+      <button class="btn secondary" id="btnShare" style="margin-top:8px;">共有メニューを開く</button>
+      <div class="save-status" id="saveStatus">端末へ直接保存する時は「端末に保存」。iPhoneで写真アプリへ入れたい時は「共有メニューを開く」→「画像を保存」が便利です。</div>
+      <button class="btn secondary" id="btnNew" style="margin-top:8px;">別の画像を選ぶ</button>
+      </div>
+    </div>
+  </aside>
+</div>
+<div class="sticky-savebar" id="stickySavebar" style="display:none;">
+  <div class="sticky-savebar-inner">
+    <button class="btn" id="btnSaveSticky" type="button">PNGを端末に保存</button>
+    <button class="btn secondary" id="btnShareSticky" type="button">共有メニュー</button>
+  </div>
+</div>
+<div class="toast info" id="toast" aria-live="polite" aria-atomic="true"><div class="toast-inner" id="toastText"></div></div>
+<input type="file" id="fileInput" class="fileInput" accept="image/*,.heic,.heif,image/heic,image/heif">
+<p class="footer-note">※ 人物判定は自動処理のため、髪・耳・手先・装飾などで境界が前後する場合があります。その場合は補正ブラシで微調整してください。背景ぼかしは自然寄りになるよう調整しています。</p>
+<div class="privacy-note"><strong>プライバシーについて</strong><br>このツールは、加工に使用する画像をサーバーへアップロードせず、お使いのPC・スマホのブラウザ内で処理する設計です。画像データが端末の外へ送信・保存されることはありません。人物判定用モデルの初回読み込み時のみインターネット接続が必要ですが、写真そのものは送信されません。プライバシーに配慮して安心してお使いいただけます。</div>
+</div>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const MEDIAPIPE_VERSION = '0.10.14';
+  const fileInput=$('fileInput'), pickerCard=$('pickerCard'), status=$('status'), panel=$('panel'), canvasWrap=$('canvasWrap'), canvas=$('canvas'), ctx=canvas.getContext('2d');
+  const segDot=$('segDot'), segStatus=$('segStatus');
+  const viewerTools=$('viewerTools'), correctionBanner=$('correctionBanner'), correctionModeLabel=$('correctionModeLabel');
+  const processingOverlay=$('processingOverlay'), overlayText=$('overlayText'), overlaySub=$('overlaySub');
+  const stickySavebar=$('stickySavebar'), btnSaveSticky=$('btnSaveSticky'), btnShareSticky=$('btnShareSticky');
+  const toastEl=$('toast'), toastText=$('toastText');
+  const sliderIds=['blurStrength','brushSize','filterStrength','bright','sat','contrast','warmth','glow','subjectPop','copyrightOffsetX','copyrightOffsetY','copyrightScale','copyrightOpacity'];
+  sliderIds.forEach(id=>{const el=$(id), out=$(id+'Out'); out.textContent=el.value; el.addEventListener('input',()=>out.textContent=el.value);});
+
+  let fullImg=null, fullW=0, fullH=0, workW=0, workH=0, srcCanvas=null;
+  let showAfter=true, currentPreset='glow';
+  let imageSegmenterInstance=null, autoBackgroundMask=null, segLoading=false, segError=null;
+
+  // 補正ブラシ用。v4ではこの宣言が抜けていたため、
+  // 画像読み込み後の描画がReferenceErrorで停止していました。
+  const maskPaintCanvas=$('maskPaintCanvas');
+  const maskPaintCtx=maskPaintCanvas.getContext('2d');
+  let addBlurMask=null;
+  let restoreSharpMask=null;
+  let correctionMode='restore';
+  let painting=false;
+  let lastPaint=null;
+  let paintRect=null;
+  let paintScaleX=1;
+  let paintScaleY=1;
+  let paintRadius=20;
+  let paintMinDistance=2;
+  let queuedPaintPoint=null;
+  let paintRafId=0;
+  let toastTimer=0;
+
+  const WORK_MAX=1600;
+  const PREVIEW_MAX_SIDE=720;
+
+  let previewSourceCache=null;
+  let maskRevision=0;
+  const effectiveMaskCache=new Map();
+  let renderScheduled=false;
+  let pendingRenderMode='full';
+  let settleRenderTimer=0;
+  let manualOverlayBusy=false;
+  let manualOverlayTitle='';
+  let manualOverlaySub='';
+
+  const FILTER_PRESETS={
+    glow:{bright:110,sat:106,contrast:108,warmth:8,glow:24,subjectPop:16},
+    bloom:{bright:114,sat:94,contrast:98,warmth:5,glow:14,subjectPop:10},
+    clear:{bright:106,sat:107,contrast:116,warmth:2,glow:4,subjectPop:28},
+    winter:{bright:110,sat:101,contrast:98,warmth:-12,glow:15,subjectPop:14},
+    wooton:{bright:104,sat:116,contrast:106,warmth:22,glow:13,subjectPop:15},
+    sakura:{bright:113,sat:94,contrast:90,warmth:10,glow:16,subjectPop:10}
+  };
+  const PRESETS=FILTER_PRESETS;
+
+  function offscreen(w,h){const c=document.createElement('canvas');c.width=w;c.height=h;return c;}
+  function clamp01(v){return Math.max(0,Math.min(1,v));}
+  function smoothstep(edge0,edge1,x){const t=clamp01((x-edge0)/(edge1-edge0));return t*t*(3-2*t);}
+  function clamp255(v){return Math.max(0,Math.min(255,v));}
+  function setStatus(msg){status.textContent=msg;}
+  function setOverlayVisible(show,title='',sub=''){
+    processingOverlay.hidden=!show;
+    if(show){
+      overlayText.textContent=title||'処理中…';
+      overlaySub.textContent=sub||'しばらくお待ちください。';
+    }
+  }
+
+  function updateOverlayFromState(){
+    if(manualOverlayBusy){
+      setOverlayVisible(true,manualOverlayTitle,manualOverlaySub);
+      return;
+    }
+    if(segLoading){
+      setOverlayVisible(true,'人物を判定中…','初回はモデル読み込みのため少し時間がかかることがあります。');
+      return;
+    }
+    setOverlayVisible(false);
+  }
+
+  function updateSegUI(){
+    segDot.className='dot';
+    if(segLoading){segDot.classList.add('loading');segStatus.textContent='人物判定中…';}
+    else if(segError){segDot.classList.add('error');segStatus.textContent='人物判定に失敗';}
+    else if(autoBackgroundMask){segStatus.textContent='人物判定完了';}
+    else {segDot.classList.add('loading');segStatus.textContent='人物判定の準備中';}
+    updateOverlayFromState();
+  }
+
+  function invalidatePreviewCache(){
+    previewSourceCache=null;
+  }
+
+  function bumpMaskRevision(){
+    maskRevision++;
+    effectiveMaskCache.clear();
+  }
+
+  function getPreviewSize(){
+    const maxSide=Math.max(workW,workH);
+    if(!maxSide || maxSide<=PREVIEW_MAX_SIDE) return {w:workW,h:workH,scale:1};
+    const scale=PREVIEW_MAX_SIDE/maxSide;
+    return {w:Math.max(1,Math.round(workW*scale)),h:Math.max(1,Math.round(workH*scale)),scale};
+  }
+
+  function getPreviewSource(){
+    const size=getPreviewSize();
+    if(size.scale===1) return {canvas:srcCanvas,w:workW,h:workH};
+    if(!previewSourceCache || previewSourceCache.w!==size.w || previewSourceCache.h!==size.h){
+      const c=offscreen(size.w,size.h);
+      const cctx=c.getContext('2d');
+      cctx.imageSmoothingEnabled=true;
+      if('imageSmoothingQuality' in cctx) cctx.imageSmoothingQuality='medium';
+      cctx.drawImage(srcCanvas,0,0,workW,workH,0,0,size.w,size.h);
+      previewSourceCache={canvas:c,w:size.w,h:size.h};
+    }
+    return previewSourceCache;
+  }
+
+  async function decodeFile(file){
+    if('createImageBitmap' in window){try{return await createImageBitmap(file);}catch(e){}}
+    return await new Promise((resolve,reject)=>{
+      const reader=new FileReader();
+      reader.onerror=()=>reject(new Error('FileReaderで読み込めませんでした'));
+      reader.onload=()=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=()=>reject(new Error('画像デコードに失敗しました'));img.src=reader.result;};
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function ensureImageSegmenterLoaded(){
+    if(imageSegmenterInstance) return imageSegmenterInstance;
+    const vision = await import(`https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MEDIAPIPE_VERSION}/vision_bundle.mjs`);
+    const filesetResolver = await vision.FilesetResolver.forVisionTasks(`https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MEDIAPIPE_VERSION}/wasm`);
+    imageSegmenterInstance = await vision.ImageSegmenter.createFromOptions(filesetResolver,{
+      baseOptions:{modelAssetPath:'https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite'},
+      runningMode:'IMAGE', outputCategoryMask:false, outputConfidenceMasks:true
+    });
+    return imageSegmenterInstance;
+  }
+
+  async function computeAutoBackgroundMask(){
+    if(!fullImg || segLoading) return;
+    segLoading=true;segError=null;updateSegUI();
+    try{
+      const segmenter=await ensureImageSegmenterLoaded();
+      const result=segmenter.segment(fullImg);
+      const confidenceMask=result.confidenceMasks[0];
+      const floats=confidenceMask.getAsFloat32Array();
+      const mw=confidenceMask.width, mh=confidenceMask.height;
+
+      // と同じ考え方：人物信頼度をそのまま反転して背景マスクにする
+      const raw=offscreen(mw,mh), rctx=raw.getContext('2d');
+      const imgData=rctx.createImageData(mw,mh);
+      for(let i=0;i<floats.length;i++){
+        const bgAlpha=Math.round((1-floats[i])*255);
+        imgData.data[i*4]=255;
+        imgData.data[i*4+1]=255;
+        imgData.data[i*4+2]=255;
+        imgData.data[i*4+3]=bgAlpha;
+      }
+      rctx.putImageData(imgData,0,0);
+      confidenceMask.close();
+      if(typeof result.close==='function') result.close();
+
+      autoBackgroundMask=offscreen(workW,workH);
+      const mctx=autoBackgroundMask.getContext('2d');
+      mctx.imageSmoothingEnabled=true;
+      if('imageSmoothingQuality' in mctx) mctx.imageSmoothingQuality='high';
+      mctx.drawImage(raw,0,0,workW,workH);
+
+      addBlurMask=offscreen(workW,workH);
+      restoreSharpMask=offscreen(workW,workH);
+      maskPaintCanvas.width=workW;maskPaintCanvas.height=workH;
+      maskPaintCtx.clearRect(0,0,workW,workH);
+      bumpMaskRevision();
+    }catch(err){
+      console.error(err);segError=String(err?.message||err);autoBackgroundMask=null;
+    }finally{segLoading=false;updateSegUI();render();}
+  }
+
+  function remapBackgroundMaskAlpha(maskCanvas,w,h,low=0.34,high=0.78){
+    const out=offscreen(w,h), octx=out.getContext('2d');
+    octx.drawImage(maskCanvas,0,0,w,h);
+    const img=octx.getImageData(0,0,w,h), d=img.data;
+    for(let i=0;i<d.length;i+=4){
+      const a=d[i+3]/255;
+      let na=smoothstep(low,high,a);
+      if(na<0.015) na=0;
+      d[i]=255; d[i+1]=255; d[i+2]=255; d[i+3]=Math.round(na*255);
+    }
+    octx.putImageData(img,0,0);
+    return out;
+  }
+
+  function softenMaskEdge(maskCanvas,w,h,blurPx){
+    if(blurPx<=0) return maskCanvas;
+    const out=offscreen(w,h), octx=out.getContext('2d');
+    octx.filter=`blur(${blurPx}px)`;
+    octx.drawImage(maskCanvas,0,0,w,h);
+    octx.filter='none';
+    return out;
+  }
+
+  function expandAlphaMask(maskCanvas,w,h,radiusPx){
+    const r=Math.max(0,Math.round(radiusPx));
+    if(r<=0) return maskCanvas;
+    const out=offscreen(w,h), octx=out.getContext('2d');
+    for(let oy=-r;oy<=r;oy++){
+      for(let ox=-r;ox<=r;ox++){
+        if((ox*ox)+(oy*oy)>(r*r)) continue;
+        octx.drawImage(maskCanvas,ox,oy,w,h);
+      }
+    }
+    return out;
+  }
+
+  function buildProtectedBackgroundMask(baseMask,w,h){
+    if(!baseMask) return null;
+
+    // 1) 背景ぼかし量は保ちつつ、人物境界だけ不自然になりにくいよう少しだけ圧縮
+    let refined=remapBackgroundMaskAlpha(baseMask,w,h,0.34,0.80);
+
+    // 2) 人物の縁に「やわらかい保護帯」を作って、手や腕を守りながら境界はなだらかにする
+    const subjectMask=subjectMaskFromBackgroundMask(refined,w,h);
+    const protectGrow=Math.max(1,Math.round(Math.max(w,h)/420));
+    const expandedSubject=expandAlphaMask(subjectMask,w,h,protectGrow);
+    const protectBlur=Math.max(4,Math.round(Math.max(w,h)/170));
+    const protect=offscreen(w,h), pctx=protect.getContext('2d');
+    pctx.filter=`blur(${protectBlur}px)`;
+    pctx.drawImage(expandedSubject,0,0,w,h);
+    pctx.filter='none';
+    const protectImg=pctx.getImageData(0,0,w,h), pd=protectImg.data;
+    for(let i=0;i<pd.length;i+=4){
+      const a=pd[i+3]/255;
+      const na=smoothstep(0.10,0.52,a);
+      pd[i]=255; pd[i+1]=255; pd[i+2]=255; pd[i+3]=Math.round(na*255);
+    }
+    pctx.putImageData(protectImg,0,0);
+
+    const cut=offscreen(w,h), cctx=cut.getContext('2d');
+    cctx.drawImage(refined,0,0,w,h);
+    cctx.globalCompositeOperation='destination-out';
+    cctx.drawImage(protect,0,0,w,h);
+    cctx.globalCompositeOperation='source-over';
+
+    // 3) 境目を少し広めにフェザーして、背景のぼけ感は残したまま切り抜き感を減らす
+    refined=softenMaskEdge(cut,w,h,2.4);
+    refined=remapBackgroundMaskAlpha(refined,w,h,0.06,0.98);
+    return refined;
+  }
+
+  function buildEffectiveBackgroundMask(w,h){
+    if(!autoBackgroundMask && !addBlurMask) return null;
+    const cacheKey=`${maskRevision}:${w}x${h}`;
+    if(effectiveMaskCache.has(cacheKey)) return effectiveMaskCache.get(cacheKey);
+    const out=offscreen(w,h), octx=out.getContext('2d');
+    if(autoBackgroundMask) octx.drawImage(autoBackgroundMask,0,0,workW,workH,0,0,w,h);
+    if(addBlurMask) octx.drawImage(addBlurMask,0,0,workW,workH,0,0,w,h);
+    if(restoreSharpMask){
+      octx.globalCompositeOperation='destination-out';
+      octx.drawImage(restoreSharpMask,0,0,workW,workH,0,0,w,h);
+      octx.globalCompositeOperation='source-over';
+    }
+    const refined=buildProtectedBackgroundMask(out,w,h);
+    effectiveMaskCache.set(cacheKey,refined);
+    return refined;
+  }
+
+
+  // と同じ考え方: 一度小さく縮めてから拡大して滑らかなぼかしを作る
+  function buildScaleBlur(source,w,h,radiusPx){
+    if(radiusPx<=0){const c=offscreen(w,h);c.getContext('2d').drawImage(source,0,0,w,h);return c;}
+    const targetScale=Math.min(1,1/(radiusPx*.55));
+    const targetW=Math.max(2,Math.round(w*targetScale));
+    const targetH=Math.max(2,Math.round(h*targetScale));
+    let cw=w,ch=h;
+    let cur=offscreen(cw,ch);
+    let cctx=cur.getContext('2d'); cctx.imageSmoothingEnabled=true; if('imageSmoothingQuality' in cctx)cctx.imageSmoothingQuality='high'; cctx.drawImage(source,0,0,w,h,0,0,cw,ch);
+    while(cw>targetW && ch>targetH && cw>4 && ch>4){
+      const nw=Math.max(2,Math.round(cw/2)), nh=Math.max(2,Math.round(ch/2));
+      const next=offscreen(nw,nh), nctx=next.getContext('2d'); nctx.imageSmoothingEnabled=true; if('imageSmoothingQuality' in nctx)nctx.imageSmoothingQuality='high'; nctx.drawImage(cur,0,0,cw,ch,0,0,nw,nh); cur=next; cw=nw; ch=nh;
+    }
+    if(cw!==targetW||ch!==targetH){const trimmed=offscreen(targetW,targetH), tctx=trimmed.getContext('2d');tctx.imageSmoothingEnabled=true;if('imageSmoothingQuality' in tctx)tctx.imageSmoothingQuality='high';tctx.drawImage(cur,0,0,cw,ch,0,0,targetW,targetH);cur=trimmed;cw=targetW;ch=targetH;}
+    const out=offscreen(w,h), octx=out.getContext('2d');octx.imageSmoothingEnabled=true;if('imageSmoothingQuality' in octx)octx.imageSmoothingQuality='high';octx.drawImage(cur,0,0,cw,ch,0,0,w,h);return out;
+  }
+
+  function subjectMaskFromBackgroundMask(mask,w,h){
+    const out=offscreen(w,h);
+    const octx=out.getContext('2d');
+    octx.fillStyle='#fff';
+    octx.fillRect(0,0,w,h);
+    octx.globalCompositeOperation='destination-out';
+    octx.drawImage(mask,0,0,w,h);
+    octx.globalCompositeOperation='source-over';
+    return out;
+  }
+
+  function sharpenCanvas(source,w,h,amount){
+    const srcC=offscreen(w,h);
+    const sctx=srcC.getContext('2d');
+    sctx.drawImage(source,0,0,w,h);
+    const src=sctx.getImageData(0,0,w,h);
+    const s=src.data;
+    const out=offscreen(w,h);
+    const octx=out.getContext('2d');
+    const dst=octx.createImageData(w,h);
+    const d=dst.data;
+    const t=Math.max(0,Math.min(1,amount/40));
+    const center=1+4*t;
+    const edge=-t;
+    const clamp255=v=>Math.max(0,Math.min(255,v));
+
+    for(let y=0;y<h;y++){
+      for(let x=0;x<w;x++){
+        const idx=(y*w+x)*4;
+        if(x===0||y===0||x===w-1||y===h-1){
+          d[idx]=s[idx]; d[idx+1]=s[idx+1]; d[idx+2]=s[idx+2]; d[idx+3]=s[idx+3];
+          continue;
+        }
+        const top=((y-1)*w+x)*4;
+        const bottom=((y+1)*w+x)*4;
+        const left=(y*w+(x-1))*4;
+        const right=(y*w+(x+1))*4;
+        d[idx]=clamp255(s[idx]*center+s[top]*edge+s[bottom]*edge+s[left]*edge+s[right]*edge);
+        d[idx+1]=clamp255(s[idx+1]*center+s[top+1]*edge+s[bottom+1]*edge+s[left+1]*edge+s[right+1]*edge);
+        d[idx+2]=clamp255(s[idx+2]*center+s[top+2]*edge+s[bottom+2]*edge+s[left+2]*edge+s[right+2]*edge);
+        d[idx+3]=s[idx+3];
+      }
+    }
+    octx.putImageData(dst,0,0);
+    return out;
+  }
+
+  function applySubjectPop(source,w,h,backgroundMask,amount){
+    if(!backgroundMask || amount<=0) return source;
+    const subjectMask=subjectMaskFromBackgroundMask(backgroundMask,w,h);
+    const sharpened=sharpenCanvas(source,w,h,amount);
+    const sharpSubject=offscreen(w,h);
+    const ssctx=sharpSubject.getContext('2d');
+    ssctx.drawImage(sharpened,0,0);
+    ssctx.globalCompositeOperation='destination-in';
+    ssctx.drawImage(subjectMask,0,0,w,h);
+    ssctx.globalCompositeOperation='source-over';
+
+    const out=offscreen(w,h);
+    const octx=out.getContext('2d');
+    octx.drawImage(source,0,0);
+    octx.globalAlpha=Math.min(0.9,amount/24);
+    octx.drawImage(sharpSubject,0,0);
+    octx.globalAlpha=1;
+    return out;
+  }
+
+  function values(){
+    const strength=Math.max(0,Math.min(1,+$('filterStrength').value/100));
+    const preset=PRESETS[currentPreset]||PRESETS.glow;
+    const raw={
+      bright:+$('bright').value,
+      sat:+$('sat').value,
+      contrast:+$('contrast').value,
+      warmth:+$('warmth').value,
+      glow:+$('glow').value,
+      subjectPop:+$('subjectPop').value
+    };
+
+    // プリセット由来の差だけを「フィルタの強さ」で弱める。
+    // 手動で動かした差分は、フィルタ強度に関係なく必ず反映する。
+    const effective={
+      bright:100+(preset.bright-100)*strength+(raw.bright-preset.bright),
+      sat:100+(preset.sat-100)*strength+(raw.sat-preset.sat),
+      contrast:100+(preset.contrast-100)*strength+(raw.contrast-preset.contrast),
+      warmth:preset.warmth*strength+(raw.warmth-preset.warmth),
+      glow:Math.max(0,preset.glow*strength+(raw.glow-preset.glow)),
+      subjectPop:Math.max(0,preset.subjectPop*strength+(raw.subjectPop-preset.subjectPop))
+    };
+
+    return{
+      filterStrength:strength,
+      bright:effective.bright/100,
+      sat:effective.sat/100,
+      contrast:effective.contrast/100,
+      warmth:effective.warmth,
+      glow:effective.glow,
+      blur:+$('blurStrength').value,
+      subjectPop:effective.subjectPop
+    };
+  }
+
+  function applyBasicAdjustments(src,w,h,v){
+    const out=offscreen(w,h), octx=out.getContext('2d');
+    octx.drawImage(src,0,0,w,h);
+
+    const bright=v.bright;
+    const sat=v.sat;
+    const contrast=v.contrast;
+    const warmth=v.warmth;
+
+    if(Math.abs(bright-1)<0.0001 && Math.abs(sat-1)<0.0001 && Math.abs(contrast-1)<0.0001 && Math.abs(warmth)<0.0001){
+      return out;
+    }
+
+    const img=octx.getImageData(0,0,w,h), d=img.data;
+    const wr=warmth>0 ? warmth*1.48 : warmth*0.32;
+    const wg=warmth>0 ? warmth*0.22 : -warmth*0.07;
+    const wb=warmth>0 ? -warmth*1.28 : -warmth*1.48;
+
+    for(let i=0;i<d.length;i+=4){
+      let r=d[i]*bright;
+      let g=d[i+1]*bright;
+      let b=d[i+2]*bright;
+
+      const lum=0.2126*r+0.7152*g+0.0722*b;
+      r=lum+(r-lum)*sat;
+      g=lum+(g-lum)*sat;
+      b=lum+(b-lum)*sat;
+
+      r=(r-127.5)*contrast+127.5;
+      g=(g-127.5)*contrast+127.5;
+      b=(b-127.5)*contrast+127.5;
+
+      r+=wr; g+=wg; b+=wb;
+      d[i]=clamp255(r);
+      d[i+1]=clamp255(g);
+      d[i+2]=clamp255(b);
+    }
+    octx.putImageData(img,0,0);
+    return out;
+  }
+
+  function applyPresetLook(out,w,h,strength){
+    if(strength<=0) return out;
+    const octx=out.getContext('2d');
+    octx.save();
+    octx.globalAlpha=strength;
+    if(currentPreset==='bloom'){
+      octx.globalCompositeOperation='soft-light';
+      const g=octx.createLinearGradient(0,0,w,h);
+      g.addColorStop(0,'rgba(255,214,214,.13)');
+      g.addColorStop(1,'rgba(255,240,200,.12)');
+      octx.fillStyle=g;octx.fillRect(0,0,w,h);
+    }else if(currentPreset==='winter'){
+      octx.globalCompositeOperation='soft-light';
+      const g=octx.createLinearGradient(0,0,w,h);
+      g.addColorStop(0,'rgba(168,208,248,.18)');
+      g.addColorStop(.52,'rgba(188,215,248,.15)');
+      g.addColorStop(1,'rgba(214,225,245,.10)');
+      octx.fillStyle=g;octx.fillRect(0,0,w,h);
+      octx.globalCompositeOperation='screen';
+      octx.fillStyle='rgba(196,222,255,.045)';octx.fillRect(0,0,w,h);
+    }else if(currentPreset==='wooton'){
+      octx.globalCompositeOperation='soft-light';
+      const g=octx.createLinearGradient(0,0,w,h);
+      g.addColorStop(0,'rgba(170,92,44,.18)');
+      g.addColorStop(.48,'rgba(218,132,62,.14)');
+      g.addColorStop(1,'rgba(246,191,102,.09)');
+      octx.fillStyle=g;octx.fillRect(0,0,w,h);
+      octx.globalCompositeOperation='multiply';
+      octx.fillStyle='rgba(126,80,48,.035)';octx.fillRect(0,0,w,h);
+    }else if(currentPreset==='sakura'){
+      octx.globalCompositeOperation='soft-light';
+      const g=octx.createLinearGradient(0,0,w,h);
+      g.addColorStop(0,'rgba(255,168,196,.24)');
+      g.addColorStop(.52,'rgba(255,191,214,.19)');
+      g.addColorStop(1,'rgba(248,216,230,.12)');
+      octx.fillStyle=g;octx.fillRect(0,0,w,h);
+      octx.globalCompositeOperation='screen';
+      octx.fillStyle='rgba(255,228,242,.085)';octx.fillRect(0,0,w,h);
+    }else if(currentPreset==='glow'){
+      octx.globalCompositeOperation='screen';
+      octx.fillStyle='rgba(255,255,255,.10)';octx.fillRect(0,0,w,h);
+    }
+    octx.restore();
+    return out;
+  }
+
+  function applyFilter(src,w,h){
+    const v=values();
+    const out=applyBasicAdjustments(src,w,h,v);
+    applyPresetLook(out,w,h,v.filterStrength);
+
+    if(v.glow>0){
+      const octx=out.getContext('2d');
+      const glow=offscreen(w,h), gctx=glow.getContext('2d');
+      gctx.filter=`blur(${Math.max(2,v.glow*.7)}px)`;
+      gctx.drawImage(out,0,0);
+      octx.globalCompositeOperation='screen';
+      octx.globalAlpha=Math.min(.48,v.glow/90);
+      octx.drawImage(glow,0,0);
+      octx.globalAlpha=1;
+      octx.globalCompositeOperation='source-over';
+    }
+    return out;
+  }
+
+  function composeProcessed(src,w,h,mask,interactive=false){
+    const filtered=applyFilter(src,w,h);
+    const v=values();
+    let out=filtered;
+
+    if($('blurOn').checked && mask){
+      const blurred=buildScaleBlur(filtered,w,h,v.blur);
+      const blurLayer=offscreen(w,h);
+      const bctx=blurLayer.getContext('2d');
+      bctx.drawImage(blurred,0,0);
+      bctx.globalCompositeOperation='destination-in';
+      bctx.drawImage(mask,0,0,w,h);
+      bctx.globalCompositeOperation='source-over';
+
+      const merged=offscreen(w,h);
+      const mctx=merged.getContext('2d');
+      mctx.drawImage(filtered,0,0);
+      mctx.drawImage(blurLayer,0,0);
+      out=merged;
+    }
+
+    if(!interactive && v.subjectPop>0 && mask){
+      out=applySubjectPop(out,w,h,mask,v.subjectPop);
+    }
+    return out;
+  }
+
+  function render(mode='full'){
+    if(!srcCanvas) return;
+    const usePreview=mode==='preview';
+    ctx.clearRect(0,0,workW,workH);
+    ctx.imageSmoothingEnabled=true;
+    if('imageSmoothingQuality' in ctx) ctx.imageSmoothingQuality=usePreview?'medium':'high';
+    if(!showAfter){
+      ctx.drawImage(srcCanvas,0,0);
+      return;
+    }
+    const sourceInfo=usePreview ? getPreviewSource() : {canvas:srcCanvas,w:workW,h:workH};
+    const effective=buildEffectiveBackgroundMask(sourceInfo.w,sourceInfo.h);
+    const out=composeProcessed(sourceInfo.canvas,sourceInfo.w,sourceInfo.h,effective,usePreview);
+    if(usePreview && (sourceInfo.w!==workW || sourceInfo.h!==workH)) ctx.drawImage(out,0,0,sourceInfo.w,sourceInfo.h,0,0,workW,workH);
+    else ctx.drawImage(out,0,0);
+  }
+
+  function requestRender(mode='full'){
+    if(mode==='full') pendingRenderMode='full';
+    else if(!renderScheduled) pendingRenderMode='preview';
+    else if(pendingRenderMode!=='full') pendingRenderMode='preview';
+    if(renderScheduled) return;
+    renderScheduled=true;
+    requestAnimationFrame(()=>{
+      renderScheduled=false;
+      const nextMode=pendingRenderMode;
+      pendingRenderMode='full';
+      render(nextMode);
+    });
+  }
+
+  function requestInteractiveRender(){
+    requestRender('preview');
+    clearTimeout(settleRenderTimer);
+    settleRenderTimer=setTimeout(()=>requestRender('full'),260);
+  }
+
+  function updateViewButtons(){
+    $('btnBeforeStage').classList.toggle('active',!showAfter);
+    $('btnAfterStage').classList.toggle('active',showAfter);
+  }
+
+  function updateCorrectionUI(){
+    const on=$('correctionOn').checked;
+    canvasWrap.classList.toggle('is-correcting',on);
+    correctionBanner.style.display=on?'flex':'none';
+    correctionModeLabel.textContent=correctionMode==='restore'?'現在: 鮮明に戻す':'現在: ぼかしを足す';
+    $('restoreBtn').classList.toggle('active',correctionMode==='restore');
+    $('addBlurBtn').classList.toggle('active',correctionMode==='add');
+  }
+
+
+  function applyPreset(name){currentPreset=name;const p=PRESETS[name];Object.keys(p).forEach(k=>{$(k).value=p[k];$(k+'Out').textContent=p[k];});document.querySelectorAll('#presetWrap button').forEach(b=>b.classList.toggle('active',b.dataset.preset===name));requestRender('full');}
+  document.querySelectorAll('#presetWrap button').forEach(btn=>btn.addEventListener('click',()=>applyPreset(btn.dataset.preset)));
+  $('btnResetPreset').addEventListener('click',()=>applyPreset(currentPreset));
+  document.querySelectorAll('[data-group-toggle]').forEach(btn=>btn.addEventListener('click',()=>{
+    const group=btn.closest('.group');
+    const willOpen=!group.classList.contains('open');
+    group.classList.toggle('open',willOpen);
+    btn.setAttribute('aria-expanded',willOpen?'true':'false');
+  }));
+  applyPreset('glow');
+  updateViewButtons();
+  updateCorrectionUI();
+
+  fileInput.addEventListener('change',async()=>{
+    const file=fileInput.files&&fileInput.files[0];if(!file)return;
+    setStatus(`読み込み中…\n${file.name}\n${file.type||'MIME不明'} / ${Math.round(file.size/1024)} KB`);
+    try{
+      const decoded=await decodeFile(file);fullImg=decoded;fullW=decoded.width||decoded.naturalWidth;fullH=decoded.height||decoded.naturalHeight;if(!fullW||!fullH)throw new Error('画像サイズを取得できませんでした');
+      const scale=Math.min(1,WORK_MAX/Math.max(fullW,fullH));workW=Math.max(1,Math.round(fullW*scale));workH=Math.max(1,Math.round(fullH*scale));
+      srcCanvas=offscreen(workW,workH);
+      srcCanvas.getContext('2d').drawImage(fullImg,0,0,workW,workH);
+      canvas.width=workW;canvas.height=workH;
+      maskPaintCanvas.width=workW;maskPaintCanvas.height=workH;
+      maskPaintCtx.clearRect(0,0,workW,workH);
+      invalidatePreviewCache();
+      effectiveMaskCache.clear();
+        maskRevision=0;
+      addBlurMask=null;
+      restoreSharpMask=null;
+      painting=false;
+      lastPaint=null;
+      pickerCard.style.display='none';canvasWrap.style.display='block';panel.style.display='block';viewerTools.style.display='block';stickySavebar.style.display='block';
+      autoBackgroundMask=null;segError=null;updateSegUI();
+      applyPreset(currentPreset);
+      computeAutoBackgroundMask();
+    }catch(err){setStatus('読み込み失敗\n'+(err&&err.message?err.message:String(err))+'\n\nHEICの場合はJPEG/PNGで試してください。');}
+  });
+
+  $('btnBeforeStage').addEventListener('click',()=>{showAfter=false;updateViewButtons();requestRender('full');});
+  $('btnAfterStage').addEventListener('click',()=>{showAfter=true;updateViewButtons();requestRender('full');});
+  $('blurOn').addEventListener('change',()=>requestRender('full'));
+  const visualControlIds=new Set(['filterStrength','bright','sat','contrast','warmth','glow','subjectPop']);
+  function ensureAfterViewForAdjustment(id){
+    if(!visualControlIds.has(id)) return;
+    if(!showAfter){
+      showAfter=true;
+      updateViewButtons();
+    }
+  }
+  sliderIds.forEach(id=>{
+    const el=$(id);
+    const preview=()=>{ensureAfterViewForAdjustment(id);requestInteractiveRender();};
+    const finish=()=>{ensureAfterViewForAdjustment(id);requestRender('full');};
+    el.addEventListener('input',preview);
+    el.addEventListener('change',finish);
+    el.addEventListener('pointerup',finish);
+    el.addEventListener('touchend',finish,{passive:true});
+  });
+  $('correctionOn').addEventListener('change',()=>{if(!$('correctionOn').checked){painting=false;lastPaint=null;paintRect=null;queuedPaintPoint=null;if(paintRafId){cancelAnimationFrame(paintRafId);paintRafId=0;}maskPaintCtx.clearRect(0,0,workW,workH);}updateCorrectionUI();});
+  $('restoreBtn').addEventListener('click',()=>{correctionMode='restore';updateCorrectionUI();});
+  $('addBlurBtn').addEventListener('click',()=>{correctionMode='add';updateCorrectionUI();});
+  $('clearCorrection').addEventListener('click',()=>{queuedPaintPoint=null;if(paintRafId){cancelAnimationFrame(paintRafId);paintRafId=0;}if(addBlurMask)addBlurMask.getContext('2d').clearRect(0,0,workW,workH);if(restoreSharpMask)restoreSharpMask.getContext('2d').clearRect(0,0,workW,workH);maskPaintCtx.clearRect(0,0,workW,workH);bumpMaskRevision();requestRender('full');});
+
+  // 補正ブラシ軽量化：ドラッグ中は重い画像再処理を行わず、
+  // マスクと軽いブラシ軌跡だけ更新。加工結果は指を離した時に1回だけ再描画する。
+  function beginPaint(clientX,clientY){
+    paintRect=maskPaintCanvas.getBoundingClientRect();
+    paintScaleX=workW/paintRect.width;
+    paintScaleY=workH/paintRect.height;
+    const avgScale=(paintScaleX+paintScaleY)/2;
+    paintRadius=(+$('brushSize').value/2)*avgScale;
+    const trackingMode=$('brushTrackingMode').value;
+    paintMinDistance=trackingMode==='precise'
+      ? Math.max(0.8,Math.min(2.2,paintRadius*0.06))
+      : Math.max(1.5,Math.min(6,paintRadius*0.16));
+    queuedPaintPoint=null;
+    if(paintRafId){cancelAnimationFrame(paintRafId);paintRafId=0;}
+    lastPaint=null;
+    maskPaintCtx.clearRect(0,0,workW,workH);
+    paintPoint(clientX,clientY);
+  }
+
+  function drawBrushPreview(x,y,prev){
+    maskPaintCtx.save();
+    maskPaintCtx.strokeStyle=correctionMode==='restore'?'rgba(120,220,160,.42)':'rgba(230,190,105,.42)';
+    maskPaintCtx.fillStyle=maskPaintCtx.strokeStyle;
+    maskPaintCtx.lineWidth=paintRadius*2;
+    maskPaintCtx.lineCap='round';
+    maskPaintCtx.lineJoin='round';
+    if(prev){
+      maskPaintCtx.beginPath();
+      maskPaintCtx.moveTo(prev.x,prev.y);
+      maskPaintCtx.lineTo(x,y);
+      maskPaintCtx.stroke();
+    }else{
+      maskPaintCtx.beginPath();
+      maskPaintCtx.arc(x,y,paintRadius,0,Math.PI*2);
+      maskPaintCtx.fill();
+    }
+    maskPaintCtx.restore();
+  }
+
+  function paintPoint(clientX,clientY){
+    if(!autoBackgroundMask || !paintRect) return;
+    const x=(clientX-paintRect.left)*paintScaleX;
+    const y=(clientY-paintRect.top)*paintScaleY;
+    const prev=lastPaint;
+    if(prev){
+      const dx=x-prev.x, dy=y-prev.y;
+      if((dx*dx+dy*dy) < (paintMinDistance*paintMinDistance)) return;
+    }
+    const target=correctionMode==='add'?addBlurMask:restoreSharpMask;
+    const tctx=target.getContext('2d');
+    tctx.strokeStyle='rgba(255,255,255,1)';
+    tctx.fillStyle='rgba(255,255,255,1)';
+    tctx.lineWidth=paintRadius*2;
+    tctx.lineCap='round';
+    tctx.lineJoin='round';
+    if(prev){
+      tctx.beginPath();
+      tctx.moveTo(prev.x,prev.y);
+      tctx.lineTo(x,y);
+      tctx.stroke();
+    }else{
+      tctx.beginPath();
+      tctx.arc(x,y,paintRadius,0,Math.PI*2);
+      tctx.fill();
+    }
+    drawBrushPreview(x,y,prev);
+    lastPaint={x,y};
+  }
+
+  function queuePaint(clientX,clientY){
+    queuedPaintPoint={clientX,clientY};
+    if(paintRafId) return;
+    paintRafId=requestAnimationFrame(()=>{
+      paintRafId=0;
+      if(!queuedPaintPoint) return;
+      const pt=queuedPaintPoint;
+      queuedPaintPoint=null;
+      paintPoint(pt.clientX,pt.clientY);
+    });
+  }
+
+  function finishPaint(){
+    if(!painting) return;
+    painting=false;
+    if(paintRafId){cancelAnimationFrame(paintRafId);paintRafId=0;}
+    if(queuedPaintPoint){const pt=queuedPaintPoint;queuedPaintPoint=null;paintPoint(pt.clientX,pt.clientY);}
+    lastPaint=null;
+    paintRect=null;
+    maskPaintCtx.clearRect(0,0,workW,workH);
+    bumpMaskRevision();
+    requestInteractiveRender();
+  }
+
+  maskPaintCanvas.addEventListener('pointerdown',e=>{
+    if(!$('correctionOn').checked)return;
+    e.preventDefault();
+    painting=true;
+    maskPaintCanvas.setPointerCapture(e.pointerId);
+    beginPaint(e.clientX,e.clientY);
+  });
+  maskPaintCanvas.addEventListener('pointermove',e=>{
+    if(!painting)return;
+    e.preventDefault();
+    if($('brushTrackingMode').value==='precise') paintPoint(e.clientX,e.clientY);
+    else queuePaint(e.clientX,e.clientY);
+  });
+  maskPaintCanvas.addEventListener('pointerup',finishPaint);
+  maskPaintCanvas.addEventListener('pointercancel',finishPaint);
+
+  $('btnNew').addEventListener('click',()=>{fileInput.value='';fileInput.click();});
+
+  function roundRect(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath();}
+
+  function drawCopyrightWatermark(octx,w,h){
+    if(!$('copyrightOn').checked) return;
+    const scale=(+$('copyrightScale').value||100)/100;
+    const opacity=(+$('copyrightOpacity').value||100)/100;
+    const pad=Math.max(18,Math.round(w*.014*scale));
+    const fontSize=Math.max(16,Math.round(w*.018*scale));
+    const text='(C) SQUARE ENIX';
+    const styleEl=$('copyrightStyle');
+    const style=styleEl ? styleEl.value : 'soft-panel';
+    const pos=$('copyrightPos').value;
+    const offsetX=+$('copyrightOffsetX').value||0;
+    const offsetY=+$('copyrightOffsetY').value||0;
+
+    octx.save();
+    octx.globalAlpha=Math.max(.2,Math.min(1,opacity));
+    octx.font=`600 ${fontSize}px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif`;
+    octx.textAlign='left';
+    octx.textBaseline='bottom';
+    octx.lineJoin='round';
+
+    const tw=octx.measureText(text).width;
+    const panelStyle=style==='soft-panel'||style==='light-panel';
+    const hPad=panelStyle?fontSize*.46:fontSize*.22;
+    const vPad=panelStyle?fontSize*.36:fontSize*.24;
+    const bw=tw+hPad*2;
+    const bh=fontSize+vPad*2;
+
+    let boxX=pad;
+    let boxY=h-pad-bh;
+    if(pos==='bottom-right') boxX=w-pad-bw;
+    else if(pos==='bottom-center') boxX=Math.round((w-bw)/2);
+    else if(pos==='top-right') {boxX=w-pad-bw;boxY=pad;}
+    else if(pos==='top-left') {boxX=pad;boxY=pad;}
+    else if(pos==='top-center') {boxX=Math.round((w-bw)/2);boxY=pad;}
+
+    boxX=Math.max(pad,Math.min(w-pad-bw,boxX+offsetX));
+    boxY=Math.max(pad,Math.min(h-pad-bh,boxY+offsetY));
+    const textX=boxX+hPad;
+    const textY=boxY+bh-vPad;
+
+    if(style==='soft-panel'){
+      octx.fillStyle='rgba(0,0,0,.34)';
+      roundRect(octx,boxX,boxY,bw,bh,fontSize*.52);
+      octx.fill();
+      octx.fillStyle='rgba(255,255,255,.97)';
+      octx.fillText(text,textX,textY);
+    }else if(style==='light-panel'){
+      octx.fillStyle='rgba(255,255,255,.76)';
+      roundRect(octx,boxX,boxY,bw,bh,fontSize*.52);
+      octx.fill();
+      octx.fillStyle='rgba(27,48,68,.95)';
+      octx.fillText(text,textX,textY);
+    }else if(style==='white-shadow'){
+      octx.shadowColor='rgba(0,0,0,.72)';
+      octx.shadowBlur=Math.max(2,fontSize*.18);
+      octx.shadowOffsetY=Math.max(1,fontSize*.07);
+      octx.fillStyle='rgba(255,255,255,.98)';
+      octx.fillText(text,textX,textY);
+    }else if(style==='white-outline'){
+      octx.lineWidth=Math.max(2,fontSize*.11);
+      octx.strokeStyle='rgba(0,0,0,.78)';
+      octx.strokeText(text,textX,textY);
+      octx.fillStyle='rgba(255,255,255,.99)';
+      octx.fillText(text,textX,textY);
+    }else if(style==='black-outline'){
+      octx.lineWidth=Math.max(2,fontSize*.12);
+      octx.strokeStyle='rgba(255,255,255,.92)';
+      octx.strokeText(text,textX,textY);
+      octx.fillStyle='rgba(16,22,29,.96)';
+      octx.fillText(text,textX,textY);
+    }else{
+      octx.fillStyle='rgba(255,255,255,.97)';
+      octx.fillText(text,textX,textY);
+    }
+    octx.restore();
+  }
+
+  function sanitizeFileName(name){
+    const cleaned=(name||'palette_studio')
+      .replace(/[\\/:*?\"<>|]+/g,'_')
+      .replace(/^\.+|\.+$/g,'')
+      .trim();
+    return cleaned || 'palette_studio';
+  }
+
+  function getExportSpec(){
+    const requested=$('saveSize').value;
+    let w=fullW, h=fullH;
+    if(requested!=='original'){
+      const maxSide=+requested;
+      const scale=Math.min(1,maxSide/Math.max(fullW,fullH));
+      w=Math.max(1,Math.round(fullW*scale));
+      h=Math.max(1,Math.round(fullH*scale));
+    }
+    const format=$('saveFormat').value;
+    const mime=format==='jpeg'?'image/jpeg':'image/png';
+    const ext=format==='jpeg'?'jpg':'png';
+    const quality=format==='jpeg'?(+$('jpegQuality').value/100):undefined;
+    const fileName=`${sanitizeFileName($('saveFileName').value)}.${ext}`;
+    return {w,h,format,mime,ext,quality,fileName};
+  }
+
+  async function exportImage(){
+    const spec=getExportSpec();
+    const exportSrc=offscreen(spec.w,spec.h);
+    const esctx=exportSrc.getContext('2d');
+    esctx.imageSmoothingEnabled=true;
+    if('imageSmoothingQuality' in esctx) esctx.imageSmoothingQuality='high';
+    esctx.drawImage(fullImg,0,0,fullW,fullH,0,0,spec.w,spec.h);
+
+    let exportMask=null;
+    if(autoBackgroundMask) exportMask=buildEffectiveBackgroundMask(spec.w,spec.h);
+    const out=composeProcessed(exportSrc,spec.w,spec.h,exportMask);
+    const octx=out.getContext('2d');
+    if($('copyrightOn').checked) drawCopyrightWatermark(octx,spec.w,spec.h);
+
+    const blob=await new Promise(resolve=>out.toBlob(resolve,spec.mime,spec.quality));
+    if(!blob) throw new Error('画像の書き出しに失敗しました');
+    return {blob,spec};
+  }
+
+  function setSaveBusy(busy,label='保存データを作成中…'){
+    $('btnSave').disabled=busy;
+    $('btnShare').disabled=busy;
+    $('btnNew').disabled=busy;
+    btnSaveSticky.disabled=busy;
+    btnShareSticky.disabled=busy;
+    manualOverlayBusy=busy;
+    manualOverlayTitle=label;
+    manualOverlaySub=busy?'高画質で画像を書き出しています。処理が終わるまでそのままお待ちください。':'';
+    if(busy){
+      $('btnSave').textContent=label;
+      $('btnShare').textContent=label;
+      btnSaveSticky.textContent=label;
+      btnShareSticky.textContent=label;
+    }else{
+      updateSaveUI();
+      $('btnShare').textContent='共有メニューを開く';
+      btnShareSticky.textContent='共有メニュー';
+    }
+    updateOverlayFromState();
+  }
+
+  function setSaveStatus(msg){$('saveStatus').textContent=msg;}
+
+  function showToast(msg,type='info'){
+    if(!toastEl || !toastText) return;
+    toastText.textContent=msg;
+    toastEl.className=`toast ${type}`;
+    toastEl.classList.add('show');
+    if(toastTimer) clearTimeout(toastTimer);
+    toastTimer=setTimeout(()=>toastEl.classList.remove('show'),2400);
+  }
+
+  function updateSaveUI(){
+    const isJpeg=$('saveFormat').value==='jpeg';
+    const saveLabel=isJpeg?'JPEGを端末に保存':'PNGを端末に保存';
+    $('jpegQualityRow').style.display=isJpeg?'flex':'none';
+    $('btnSave').textContent=saveLabel;
+    btnSaveSticky.textContent=isJpeg?'JPEG保存':'PNG保存';
+    $('btnShare').textContent='共有メニューを開く';
+    btnShareSticky.textContent='共有メニュー';
+    $('saveStatus').textContent=isJpeg
+      ? 'JPEGは軽く共有しやすい形式です。iPhoneで写真アプリへ入れたい時は「共有メニューを開く」→「画像を保存」を選んでください。'
+      : 'PNGはきれいに保存したい時におすすめです。iPhoneで写真アプリへ入れたい時は「共有メニューを開く」→「画像を保存」を選んでください。';
+  }
+
+  async function ensureMaskReadyForSave(){
+    if($('blurOn').checked && !autoBackgroundMask && !segLoading){
+      await computeAutoBackgroundMask();
+    }
+  }
+
+  async function saveByDownload(){
+    if(!fullImg) return;
+    setSaveBusy(true);
+    setSaveStatus('保存用データを作成しています…');
+    try{
+      await ensureMaskReadyForSave();
+      await new Promise(requestAnimationFrame);
+      const {blob,spec}=await exportImage();
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');
+      a.href=url;
+      a.download=spec.fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),2500);
+      setSaveStatus(`${spec.fileName} を端末に保存しました。`);
+      showToast('端末に保存しました。','success');
+    }catch(err){
+      console.error(err);
+      setSaveStatus('端末への保存に失敗しました。もう一度お試しください。');
+      showToast('保存に失敗しました。','error');
+    }finally{
+      setSaveBusy(false);
+    }
+  }
+
+  async function saveByShare(){
+    if(!fullImg) return;
+    setSaveBusy(true,'共有用データを作成中…');
+    setSaveStatus('共有メニュー用の画像を準備しています…');
+    try{
+      await ensureMaskReadyForSave();
+      await new Promise(requestAnimationFrame);
+      const {blob,spec}=await exportImage();
+      const file=new File([blob],spec.fileName,{type:spec.mime});
+      if(navigator.share && (!navigator.canShare || navigator.canShare({files:[file]}))){
+        await navigator.share({files:[file],title:'Palette Studio'});
+        setSaveStatus('共有メニューを開きました。iPhoneでは「画像を保存」を選ぶと写真アプリに入れられます。');
+        showToast('共有メニューを開きました。','success');
+      }else{
+        const url=URL.createObjectURL(blob);
+        const a=document.createElement('a');
+        a.href=url;
+        a.download=spec.fileName;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(()=>URL.revokeObjectURL(url),2500);
+        setSaveStatus('このブラウザでは共有に対応していないため、端末保存に切り替えました。');
+        showToast('共有未対応のため端末保存に切り替えました。','info');
+      }
+    }catch(err){
+      if(err && err.name==='AbortError') {setSaveStatus('共有をキャンセルしました。'); showToast('共有をキャンセルしました。','info');}
+      else {console.error(err);setSaveStatus('共有メニュー用画像の作成に失敗しました。'); showToast('共有の準備に失敗しました。','error');}
+    }finally{
+      setSaveBusy(false);
+    }
+  }
+
+  $('saveFormat').addEventListener('change',updateSaveUI);
+  $('jpegQuality').addEventListener('input',()=>{$('jpegQualityOut').textContent=$('jpegQuality').value;});
+  updateSaveUI();
+
+
+
+  window.addEventListener('error',e=>{
+    console.error(e.error||e.message);
+    if(!fullImg) setStatus('JavaScriptエラー: '+(e.message||'不明なエラー'));
+  });
+
+  $('btnSave').addEventListener('click',saveByDownload);
+  $('btnShare').addEventListener('click',saveByShare);
+  btnSaveSticky.addEventListener('click',saveByDownload);
+  btnShareSticky.addEventListener('click',saveByShare);
+})();
+</script>
+</body>
+</html>
