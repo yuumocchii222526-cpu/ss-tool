@@ -1,9 +1,12 @@
-FF14 Photo Studio v37
+FF14 Photo Studio v39
 
-- Clear Blue / Bデザイン
-- 丸ぼけ機能なし
-- 明るさ / 彩度 / コントラスト / 暖かさ の手動調整を修正
-- カラーフィルタ強度 0〜100
-- 背景ぼかし / 補正ブラシ / 透かし / PNG・JPEG保存
+- Clear Blue (B) design
+- Background blur / correction brush
+- Color filters: Glow / Bloom / Clear / Winter / Wooton / Sakura
+- Filter strength
+- Manual brightness / saturation / contrast / warmth controls fixed for iPhone/Safari
+- Manual adjustments now apply independently from filter strength
+- Lightweight live preview while dragging sliders; full quality is restored after release
+- Round bokeh feature is not included
 
-GitHub Pagesでは index.html を公開してください。
+GitHub Pages: place index.html at the repository root.

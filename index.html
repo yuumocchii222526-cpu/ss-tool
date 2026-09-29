@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- FF14 Photo Studio v37 - Clear Blue Theme -->
+<!-- FF14 Photo Studio v39 - Clear Blue Theme / iPhone controls fixed -->
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
@@ -63,7 +63,7 @@ h1{display:inline;margin:0;font-size:clamp(27px,5vw,40px);letter-spacing:.02em;c
 .row{display:flex;align-items:center;gap:12px;margin:12px 0;font-size:13px;min-height:44px}
 .row span{width:112px;flex:0 0 auto;color:var(--text-strong);font-weight:600}
 .row output{width:46px;text-align:right;color:var(--accent-deep);font-size:12px;font-variant-numeric:tabular-nums}
-input[type=range]{flex:1;min-width:0;accent-color:var(--accent);height:36px;touch-action:pan-y}
+input[type=range]{flex:1;min-width:0;accent-color:var(--accent);height:40px;touch-action:auto;-webkit-tap-highlight-color:transparent}
 select,.text-input{width:100%;padding:12px 13px;border-radius:14px;border:1px solid rgba(103,174,232,.30);background:rgba(255,255,255,.86);color:var(--text-strong);font-size:14px;min-width:0;box-shadow:inset 0 1px 0 rgba(255,255,255,.8)}
 select{appearance:auto}
 .save-status{margin-top:10px;color:var(--dim);font-size:11px;line-height:1.6;min-height:1.6em}
@@ -163,7 +163,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
   <section>
     <div class="card stage-empty" id="pickerCard">
       <label class="file-label" for="fileInput">画像を選ぶ</label>
-      <div class="status" id="status">JPEG / PNG / HEIC 読み込み対応（HEIC は環境により読めない場合あり）</div>
+      <div class="status" id="status">JPEG / PNG / HEIC 読み込み対応（HEIC は環境により読めない場合あり）｜v39</div>
     </div>
     <div class="canvas-wrap" id="canvasWrap"><canvas id="canvas"></canvas>
         <canvas id="maskPaintCanvas"></canvas>
@@ -232,6 +232,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
       <div class="row"><span>暖かさ</span><input id="warmth" type="range" min="-30" max="30" value="8"><output id="warmthOut">8</output></div>
       <div class="row"><span>ふんわり光</span><input id="glow" type="range" min="0" max="45" value="24"><output id="glowOut">24</output></div>
       <div class="row"><span>人物くっきり</span><input id="subjectPop" type="range" min="0" max="40" value="16"><output id="subjectPopOut">16</output></div>
+      <p class="mini" style="margin-top:8px;">明るさ・彩度・コントラスト・暖かさなどの手動調整は、フィルタの強さとは別に反映されます。</p>
       </div>
     </div>
 
@@ -307,7 +308,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
   let toastTimer=0;
 
   const WORK_MAX=1600;
-  const PREVIEW_MAX_SIDE=1120;
+  const PREVIEW_MAX_SIDE=720;
 
   let previewSourceCache=null;
   let maskRevision=0;
@@ -332,6 +333,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
   function offscreen(w,h){const c=document.createElement('canvas');c.width=w;c.height=h;return c;}
   function clamp01(v){return Math.max(0,Math.min(1,v));}
   function smoothstep(edge0,edge1,x){const t=clamp01((x-edge0)/(edge1-edge0));return t*t*(3-2*t);}
+  function clamp255(v){return Math.max(0,Math.min(255,v));}
   function setStatus(msg){status.textContent=msg;}
   function setOverlayVisible(show,title='',sub=''){
     processingOverlay.hidden=!show;
@@ -627,49 +629,92 @@ button:disabled{opacity:.55;cursor:not-allowed}
   }
 
   function values(){
-    return{
-      filterStrength:+$('filterStrength').value/100,
-      bright:+$('bright').value/100,
-      sat:+$('sat').value/100,
-      contrast:+$('contrast').value/100,
+    const strength=Math.max(0,Math.min(1,+$('filterStrength').value/100));
+    const preset=PRESETS[currentPreset]||PRESETS.glow;
+    const raw={
+      bright:+$('bright').value,
+      sat:+$('sat').value,
+      contrast:+$('contrast').value,
       warmth:+$('warmth').value,
       glow:+$('glow').value,
-      blur:+$('blurStrength').value,
       subjectPop:+$('subjectPop').value
+    };
+
+    // プリセット由来の差だけを「フィルタの強さ」で弱める。
+    // 手動で動かした差分は、フィルタ強度に関係なく必ず反映する。
+    const effective={
+      bright:100+(preset.bright-100)*strength+(raw.bright-preset.bright),
+      sat:100+(preset.sat-100)*strength+(raw.sat-preset.sat),
+      contrast:100+(preset.contrast-100)*strength+(raw.contrast-preset.contrast),
+      warmth:preset.warmth*strength+(raw.warmth-preset.warmth),
+      glow:Math.max(0,preset.glow*strength+(raw.glow-preset.glow)),
+      subjectPop:Math.max(0,preset.subjectPop*strength+(raw.subjectPop-preset.subjectPop))
+    };
+
+    return{
+      filterStrength:strength,
+      bright:effective.bright/100,
+      sat:effective.sat/100,
+      contrast:effective.contrast/100,
+      warmth:effective.warmth,
+      glow:effective.glow,
+      blur:+$('blurStrength').value,
+      subjectPop:effective.subjectPop
     };
   }
 
-  function applyFilter(src,w,h){
-    const v=values(), out=offscreen(w,h), octx=out.getContext('2d');
-
-    // 明るさ・彩度・コントラストはスライダー値をそのまま直接反映。
-    octx.filter=`brightness(${v.bright}) saturate(${v.sat}) contrast(${v.contrast})`;
+  function applyBasicAdjustments(src,w,h,v){
+    const out=offscreen(w,h), octx=out.getContext('2d');
     octx.drawImage(src,0,0,w,h);
-    octx.filter='none';
 
-    // 暖かさも手動スライダー値を直接反映。
-    if(v.warmth!==0){
-      const warm=Math.max(0,v.warmth), cool=Math.max(0,-v.warmth);
-      if(warm){
-        octx.globalCompositeOperation='soft-light';
-        octx.fillStyle=`rgba(255,186,130,${warm/110})`;
-        octx.fillRect(0,0,w,h);
-      }
-      if(cool){
-        octx.globalCompositeOperation='soft-light';
-        octx.fillStyle=`rgba(120,188,255,${cool/120})`;
-        octx.fillRect(0,0,w,h);
-      }
-      octx.globalCompositeOperation='source-over';
+    const bright=v.bright;
+    const sat=v.sat;
+    const contrast=v.contrast;
+    const warmth=v.warmth;
+
+    if(Math.abs(bright-1)<0.0001 && Math.abs(sat-1)<0.0001 && Math.abs(contrast-1)<0.0001 && Math.abs(warmth)<0.0001){
+      return out;
     }
 
+    const img=octx.getImageData(0,0,w,h), d=img.data;
+    const wr=warmth>0 ? warmth*1.48 : warmth*0.32;
+    const wg=warmth>0 ? warmth*0.22 : -warmth*0.07;
+    const wb=warmth>0 ? -warmth*1.28 : -warmth*1.48;
+
+    for(let i=0;i<d.length;i+=4){
+      let r=d[i]*bright;
+      let g=d[i+1]*bright;
+      let b=d[i+2]*bright;
+
+      const lum=0.2126*r+0.7152*g+0.0722*b;
+      r=lum+(r-lum)*sat;
+      g=lum+(g-lum)*sat;
+      b=lum+(b-lum)*sat;
+
+      r=(r-127.5)*contrast+127.5;
+      g=(g-127.5)*contrast+127.5;
+      b=(b-127.5)*contrast+127.5;
+
+      r+=wr; g+=wg; b+=wb;
+      d[i]=clamp255(r);
+      d[i+1]=clamp255(g);
+      d[i+2]=clamp255(b);
+    }
+    octx.putImageData(img,0,0);
+    return out;
+  }
+
+  function applyPresetLook(out,w,h,strength){
+    if(strength<=0) return out;
+    const octx=out.getContext('2d');
+    octx.save();
+    octx.globalAlpha=strength;
     if(currentPreset==='bloom'){
       octx.globalCompositeOperation='soft-light';
       const g=octx.createLinearGradient(0,0,w,h);
       g.addColorStop(0,'rgba(255,214,214,.13)');
       g.addColorStop(1,'rgba(255,240,200,.12)');
       octx.fillStyle=g;octx.fillRect(0,0,w,h);
-      octx.globalCompositeOperation='source-over';
     }else if(currentPreset==='winter'){
       octx.globalCompositeOperation='soft-light';
       const g=octx.createLinearGradient(0,0,w,h);
@@ -679,7 +724,6 @@ button:disabled{opacity:.55;cursor:not-allowed}
       octx.fillStyle=g;octx.fillRect(0,0,w,h);
       octx.globalCompositeOperation='screen';
       octx.fillStyle='rgba(196,222,255,.045)';octx.fillRect(0,0,w,h);
-      octx.globalCompositeOperation='source-over';
     }else if(currentPreset==='wooton'){
       octx.globalCompositeOperation='soft-light';
       const g=octx.createLinearGradient(0,0,w,h);
@@ -689,7 +733,6 @@ button:disabled{opacity:.55;cursor:not-allowed}
       octx.fillStyle=g;octx.fillRect(0,0,w,h);
       octx.globalCompositeOperation='multiply';
       octx.fillStyle='rgba(126,80,48,.035)';octx.fillRect(0,0,w,h);
-      octx.globalCompositeOperation='source-over';
     }else if(currentPreset==='sakura'){
       octx.globalCompositeOperation='soft-light';
       const g=octx.createLinearGradient(0,0,w,h);
@@ -699,15 +742,21 @@ button:disabled{opacity:.55;cursor:not-allowed}
       octx.fillStyle=g;octx.fillRect(0,0,w,h);
       octx.globalCompositeOperation='screen';
       octx.fillStyle='rgba(255,228,242,.085)';octx.fillRect(0,0,w,h);
-      octx.globalCompositeOperation='source-over';
     }else if(currentPreset==='glow'){
       octx.globalCompositeOperation='screen';
-      octx.fillStyle='rgba(255,255,255,.10)';
-      octx.fillRect(0,0,w,h);
-      octx.globalCompositeOperation='source-over';
+      octx.fillStyle='rgba(255,255,255,.10)';octx.fillRect(0,0,w,h);
     }
+    octx.restore();
+    return out;
+  }
+
+  function applyFilter(src,w,h){
+    const v=values();
+    const out=applyBasicAdjustments(src,w,h,v);
+    applyPresetLook(out,w,h,v.filterStrength);
 
     if(v.glow>0){
+      const octx=out.getContext('2d');
       const glow=offscreen(w,h), gctx=glow.getContext('2d');
       gctx.filter=`blur(${Math.max(2,v.glow*.7)}px)`;
       gctx.drawImage(out,0,0);
@@ -717,23 +766,10 @@ button:disabled{opacity:.55;cursor:not-allowed}
       octx.globalAlpha=1;
       octx.globalCompositeOperation='source-over';
     }
-
-    // フィルタの強さは完成したフィルタ結果と元画像をブレンドして調整。
-    if(v.filterStrength>=.999) return out;
-    if(v.filterStrength<=.001){
-      const plain=offscreen(w,h);
-      plain.getContext('2d').drawImage(src,0,0,w,h);
-      return plain;
-    }
-    const mixed=offscreen(w,h), mctx=mixed.getContext('2d');
-    mctx.drawImage(src,0,0,w,h);
-    mctx.globalAlpha=v.filterStrength;
-    mctx.drawImage(out,0,0,w,h);
-    mctx.globalAlpha=1;
-    return mixed;
+    return out;
   }
 
-  function composeProcessed(src,w,h,mask){
+  function composeProcessed(src,w,h,mask,interactive=false){
     const filtered=applyFilter(src,w,h);
     const v=values();
     let out=filtered;
@@ -754,7 +790,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
       out=merged;
     }
 
-    if(v.subjectPop>0 && mask){
+    if(!interactive && v.subjectPop>0 && mask){
       out=applySubjectPop(out,w,h,mask,v.subjectPop);
     }
     return out;
@@ -772,13 +808,14 @@ button:disabled{opacity:.55;cursor:not-allowed}
     }
     const sourceInfo=usePreview ? getPreviewSource() : {canvas:srcCanvas,w:workW,h:workH};
     const effective=buildEffectiveBackgroundMask(sourceInfo.w,sourceInfo.h);
-    const out=composeProcessed(sourceInfo.canvas,sourceInfo.w,sourceInfo.h,effective);
+    const out=composeProcessed(sourceInfo.canvas,sourceInfo.w,sourceInfo.h,effective,usePreview);
     if(usePreview && (sourceInfo.w!==workW || sourceInfo.h!==workH)) ctx.drawImage(out,0,0,sourceInfo.w,sourceInfo.h,0,0,workW,workH);
     else ctx.drawImage(out,0,0);
   }
 
   function requestRender(mode='full'){
     if(mode==='full') pendingRenderMode='full';
+    else if(!renderScheduled) pendingRenderMode='preview';
     else if(pendingRenderMode!=='full') pendingRenderMode='preview';
     if(renderScheduled) return;
     renderScheduled=true;
@@ -793,7 +830,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
   function requestInteractiveRender(){
     requestRender('preview');
     clearTimeout(settleRenderTimer);
-    settleRenderTimer=setTimeout(()=>requestRender('full'),120);
+    settleRenderTimer=setTimeout(()=>requestRender('full'),260);
   }
 
   function updateViewButtons(){
@@ -852,13 +889,22 @@ button:disabled{opacity:.55;cursor:not-allowed}
   $('btnBeforeStage').addEventListener('click',()=>{showAfter=false;updateViewButtons();requestRender('full');});
   $('btnAfterStage').addEventListener('click',()=>{showAfter=true;updateViewButtons();requestRender('full');});
   $('blurOn').addEventListener('change',()=>requestRender('full'));
+  const visualControlIds=new Set(['filterStrength','bright','sat','contrast','warmth','glow','subjectPop']);
+  function ensureAfterViewForAdjustment(id){
+    if(!visualControlIds.has(id)) return;
+    if(!showAfter){
+      showAfter=true;
+      updateViewButtons();
+    }
+  }
   sliderIds.forEach(id=>{
-    $(id).addEventListener('input',requestInteractiveRender);
-    $(id).addEventListener('change',()=>requestRender('full'));
-  });
-  ['bright','sat','contrast','warmth'].forEach(id=>{
-    $(id).addEventListener('input',()=>requestRender('preview'));
-    $(id).addEventListener('change',()=>requestRender('full'));
+    const el=$(id);
+    const preview=()=>{ensureAfterViewForAdjustment(id);requestInteractiveRender();};
+    const finish=()=>{ensureAfterViewForAdjustment(id);requestRender('full');};
+    el.addEventListener('input',preview);
+    el.addEventListener('change',finish);
+    el.addEventListener('pointerup',finish);
+    el.addEventListener('touchend',finish,{passive:true});
   });
   $('correctionOn').addEventListener('change',()=>{if(!$('correctionOn').checked){painting=false;lastPaint=null;paintRect=null;queuedPaintPoint=null;if(paintRafId){cancelAnimationFrame(paintRafId);paintRafId=0;}maskPaintCtx.clearRect(0,0,workW,workH);}updateCorrectionUI();});
   $('restoreBtn').addEventListener('click',()=>{correctionMode='restore';updateCorrectionUI();});
