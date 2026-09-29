@@ -1,5 +1,9 @@
-FF14 Photo Studio v18
-- 透かしサイズ調整
-- 透かし透明度調整
-- 保存完了トースト表示
-- ブラシ追従性切替（軽さ優先 / 精度優先）
+FF14 Photo Studio v25
+
+変更点
+- Dream フィルタを削除
+- Winter フィルタを追加（青白く透明感のある冬向け）
+- Spring フィルタを追加（淡い桜色・やわらかな春向け）
+- Amber は v24 の調整を維持
+
+GitHub Pages では index.html をそのまま公開できます。
