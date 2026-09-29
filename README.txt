@@ -1,11 +1,11 @@
-Palette Studio
+Palette Studio - DSLR Depth Blur
 
-- Clear Blue design
-- Background blur / correction brush
-- Color filters and manual controls
-- (C) SQUARE ENIX watermark with 5 visual styles
-- No round-bokeh feature
+- Existing Palette Studio design and tools retained
+- Adds simulated aperture (F-number) control: F1.4 to F16
+- Adds progressive depth-aware background blur using the existing subject mask
+- Uses a lightweight distance-field + perspective blend to reduce cut-out / island-like edges
+- Adds adjustable edge softness for hair, ears and accessories
+- Blur processing remains in the browser; uploaded images are not sent to a backend
+- Existing color filters, manual adjustments, correction brush, export and watermark styles are retained
 
 GitHub Pages: place index.html at the repository root.
-
-- Depth-of-field control: 0 keeps the original uniform background blur; higher values keep more focus near the subject and apply stronger blur farther away.

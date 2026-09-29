@@ -188,15 +188,18 @@ button:disabled{opacity:.55;cursor:not-allowed}
   <aside class="panel" id="panel" style="display:none;">
     <div class="group collapsible open" id="blurGroup">
       <button class="group-toggle" type="button" data-group-toggle aria-expanded="true" aria-controls="blurGroupBody">
-        <span class="group-toggle-main"><span class="group-toggle-title">背景ぼかし</span><span class="group-toggle-sub">人物判定 / 被写界深度 / 補正ブラシ</span></span>
+        <span class="group-toggle-main"><span class="group-toggle-title">背景ぼかし</span><span class="group-toggle-sub">人物判定 / F値 / 被写界深度 / 補正ブラシ</span></span>
         <span class="group-chevron">⌃</span>
       </button>
       <div class="group-body" id="blurGroupBody">
-      <p class="mini">人物を自動判定して、背景にだけぼかしをかけます。初回だけ判定モデルを読み込むためネット接続が必要です。</p>
+      <p class="mini">人物を自動判定し、背景だけにレンズ風の段階ボケをかけます。画像は端末内で処理し、初回だけ人物判定モデルの読み込みにネット接続が必要です。</p>
       <label class="check"><input type="checkbox" id="blurOn" checked> 背景ぼかしを使う</label>
-      <div class="row"><span>ぼかしの強さ</span><input id="blurStrength" type="range" min="2" max="30" value="12"><output id="blurStrengthOut">12</output></div>
-      <div class="row"><span>被写界深度</span><input id="depthOfField" type="range" min="0" max="100" value="0"><output id="depthOfFieldOut">0</output></div>
-      <p class="mini" style="margin-top:6px;">0は今まで通り背景全体を均一にぼかします。数値を上げるほど人物の周囲を広めに保護し、離れた背景ほど強くぼける見え方になります。</p>
+      <div class="row"><span>絞り（F値）</span><input id="apertureF" type="range" min="1.4" max="16" step="0.1" value="2.8"><output id="apertureFOut">2.8</output></div>
+      <p class="mini" style="margin-top:6px;">F値を小さくするとレンズの開放側になり、背景のボケが強くなります。</p>
+      <div class="row"><span>最大ボケ量</span><input id="blurStrength" type="range" min="2" max="30" value="18"><output id="blurStrengthOut">18</output></div>
+      <div class="row"><span>被写界深度</span><input id="depthOfField" type="range" min="0" max="100" value="70"><output id="depthOfFieldOut">70</output></div>
+      <div class="row"><span>境界なめらかさ</span><input id="edgeSoftness" type="range" min="0" max="100" value="48"><output id="edgeSoftnessOut">48</output></div>
+      <p class="mini" style="margin-top:6px;">被写界深度を上げるほど、人物の近くから遠景へ段階的にボケが強くなります。境界なめらかさは髪・耳・装飾まわりの切り抜き感を抑えます。</p>
       <label class="check"><input type="checkbox" id="correctionOn"> 補正ブラシを使う</label>
       <div class="small-actions">
         <button type="button" id="restoreBtn" class="active">鮮明に戻す</button>
@@ -285,7 +288,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
   const processingOverlay=$('processingOverlay'), overlayText=$('overlayText'), overlaySub=$('overlaySub');
   const stickySavebar=$('stickySavebar'), btnSaveSticky=$('btnSaveSticky'), btnShareSticky=$('btnShareSticky');
   const toastEl=$('toast'), toastText=$('toastText');
-  const sliderIds=['blurStrength','depthOfField','brushSize','filterStrength','bright','sat','contrast','warmth','glow','subjectPop','copyrightOffsetX','copyrightOffsetY','copyrightScale','copyrightOpacity'];
+  const sliderIds=['apertureF','blurStrength','depthOfField','edgeSoftness','brushSize','filterStrength','bright','sat','contrast','warmth','glow','subjectPop','copyrightOffsetX','copyrightOffsetY','copyrightScale','copyrightOpacity'];
   sliderIds.forEach(id=>{const el=$(id), out=$(id+'Out'); out.textContent=el.value; el.addEventListener('input',()=>out.textContent=el.value);});
 
   let fullImg=null, fullW=0, fullH=0, workW=0, workH=0, srcCanvas=null;
@@ -318,6 +321,8 @@ button:disabled{opacity:.55;cursor:not-allowed}
   const effectiveMaskCache=new Map();
   let depthMaskCacheKey='';
   let depthMaskCacheValue=null;
+  let depthLayerCacheKey='';
+  let depthLayerCacheValue=null;
   let renderScheduled=false;
   let pendingRenderMode='full';
   let settleRenderTimer=0;
@@ -378,6 +383,8 @@ button:disabled{opacity:.55;cursor:not-allowed}
     effectiveMaskCache.clear();
     depthMaskCacheKey='';
     depthMaskCacheValue=null;
+    depthLayerCacheKey='';
+    depthLayerCacheValue=null;
   }
 
   function getPreviewSize(){
@@ -501,22 +508,25 @@ button:disabled{opacity:.55;cursor:not-allowed}
   function buildProtectedBackgroundMask(baseMask,w,h){
     if(!baseMask) return null;
 
-    // 1) 背景ぼかし量は保ちつつ、人物境界だけ不自然になりにくいよう少しだけ圧縮
+    const edgeSoft=Math.max(0,Math.min(1,+$('edgeSoftness').value/100));
+
+    // 背景ぼかし量は保ちつつ、人物境界だけをなだらかにする。
     let refined=remapBackgroundMaskAlpha(baseMask,w,h,0.34,0.80);
 
-    // 2) 人物の縁に「やわらかい保護帯」を作って、手や腕を守りながら境界はなだらかにする
+    // 人物側へ少し保護帯を広げる。髪・耳・装飾へのボケ侵入を抑える。
     const subjectMask=subjectMaskFromBackgroundMask(refined,w,h);
-    const protectGrow=Math.max(1,Math.round(Math.max(w,h)/420));
+    const protectGrow=Math.max(1,Math.round(Math.max(w,h)*(0.0015 + edgeSoft*0.0028)));
     const expandedSubject=expandAlphaMask(subjectMask,w,h,protectGrow);
-    const protectBlur=Math.max(4,Math.round(Math.max(w,h)/170));
+    const protectBlur=Math.max(2,Math.round(Math.max(w,h)*(0.0025 + edgeSoft*0.0042)));
     const protect=offscreen(w,h), pctx=protect.getContext('2d');
     pctx.filter=`blur(${protectBlur}px)`;
     pctx.drawImage(expandedSubject,0,0,w,h);
     pctx.filter='none';
     const protectImg=pctx.getImageData(0,0,w,h), pd=protectImg.data;
+    const high=0.58-edgeSoft*0.16;
     for(let i=0;i<pd.length;i+=4){
       const a=pd[i+3]/255;
-      const na=smoothstep(0.10,0.52,a);
+      const na=smoothstep(0.08,high,a);
       pd[i]=255; pd[i+1]=255; pd[i+2]=255; pd[i+3]=Math.round(na*255);
     }
     pctx.putImageData(protectImg,0,0);
@@ -527,15 +537,14 @@ button:disabled{opacity:.55;cursor:not-allowed}
     cctx.drawImage(protect,0,0,w,h);
     cctx.globalCompositeOperation='source-over';
 
-    // 3) 境目を少し広めにフェザーして、背景のぼけ感は残したまま切り抜き感を減らす
-    refined=softenMaskEdge(cut,w,h,2.4);
-    refined=remapBackgroundMaskAlpha(refined,w,h,0.06,0.98);
+    refined=softenMaskEdge(cut,w,h,1.2+edgeSoft*2.8);
+    refined=remapBackgroundMaskAlpha(refined,w,h,0.05,0.985);
     return refined;
   }
 
   function buildEffectiveBackgroundMask(w,h){
     if(!autoBackgroundMask && !addBlurMask) return null;
-    const cacheKey=`${maskRevision}:${w}x${h}`;
+    const cacheKey=`${maskRevision}:${w}x${h}:edge${Math.round(+$('edgeSoftness').value)}`;
     if(effectiveMaskCache.has(cacheKey)) return effectiveMaskCache.get(cacheKey);
     const out=offscreen(w,h), octx=out.getContext('2d');
     if(autoBackgroundMask) octx.drawImage(autoBackgroundMask,0,0,workW,workH,0,0,w,h);
@@ -580,19 +589,24 @@ button:disabled{opacity:.55;cursor:not-allowed}
   }
 
 
-  // 疑似的な被写界深度マスク。
-  // AIの距離推定ではなく、人物マスクからの画面上の距離を使い、
-  // 人物に近い背景ほどピントを残し、離れた背景ほど強くぼかす。
-  function buildDepthFarMask(backgroundMask,w,h,depth){
+  function apertureStrength(fNumber){
+    const f=Math.max(1.4,Math.min(16,+fNumber||2.8));
+    const inv=1/f, invMin=1/16, invMax=1/1.4;
+    return clamp01((inv-invMin)/(invMax-invMin));
+  }
+
+  // 人物マスクから「背景の距離らしさ」を作る軽量な距離場。
+  // 単純な輪郭拡張ではなく、人物からの距離 + 画面上の遠近方向を混ぜることで、
+  // 人物の周囲だけが島状に残る見え方を抑える。
+  function buildProgressiveDepthLayers(backgroundMask,w,h,depth){
     const d=clamp01(depth);
-    if(!backgroundMask || d<=0.001) return backgroundMask;
+    if(!backgroundMask || d<=0.001) return null;
 
     const depthStep=Math.round(d*100);
-    const cacheKey=`${maskRevision}:${w}x${h}:${depthStep}`;
-    if(depthMaskCacheKey===cacheKey && depthMaskCacheValue) return depthMaskCacheValue;
+    const cacheKey=`${maskRevision}:${w}x${h}:${depthStep}:edge${Math.round(+$('edgeSoftness').value)}`;
+    if(depthLayerCacheKey===cacheKey && depthLayerCacheValue) return depthLayerCacheValue;
 
-    // 大きな画像でもiPhoneで重くなりすぎないよう、保護帯は小さいマスクで作る。
-    const maxSide=560;
+    const maxSide=500;
     const scale=Math.min(1,maxSide/Math.max(w,h));
     const sw=Math.max(2,Math.round(w*scale));
     const sh=Math.max(2,Math.round(h*scale));
@@ -601,57 +615,91 @@ button:disabled{opacity:.55;cursor:not-allowed}
     bgctx.imageSmoothingEnabled=true;
     if('imageSmoothingQuality' in bgctx) bgctx.imageSmoothingQuality='medium';
     bgctx.drawImage(backgroundMask,0,0,w,h,0,0,sw,sh);
+    const bgImg=bgctx.getImageData(0,0,sw,sh), bg=bgImg.data;
 
-    const subjectSmall=subjectMaskFromBackgroundMask(bgSmall,sw,sh);
+    const n=sw*sh;
+    const INF=1e6;
+    const dist=new Float32Array(n);
+    let minY=sh, maxY=0, subjectCount=0;
 
-    // 人物の周囲を今までより広めに保護し、
-    // 被写界深度を上げたときに「人物の近くの背景」までぼけにくくする。
-    const expandedRadius=Math.max(2,Math.round((Math.max(w,h)*(0.012 + d*0.030))*scale));
-    const expandedSubject=expandAlphaMask(subjectSmall,sw,sh,expandedRadius);
-    const protectSmall=offscreen(sw,sh), pctx=protectSmall.getContext('2d');
-
-    // 深くするほどピントが残る帯を広げる。
-    const fullRadius=Math.max(w,h)*(0.050 + d*0.230);
-    const smallRadius=Math.max(4,Math.min(76,fullRadius*scale));
-    pctx.filter=`blur(${smallRadius}px)`;
-    pctx.drawImage(expandedSubject,0,0,sw,sh);
-    pctx.filter='none';
-
-    // ガウスぼかしの薄い裾まで使って、境界をなだらかにする。
-    const img=pctx.getImageData(0,0,sw,sh), px=img.data;
-    const thresholdHigh=Math.max(0.045,0.13 - d*0.08);
-    for(let i=0;i<px.length;i+=4){
-      const a=px[i+3]/255;
-      const protect=smoothstep(0.004,thresholdHigh,a);
-      px[i]=255;px[i+1]=255;px[i+2]=255;px[i+3]=Math.round(protect*255);
+    for(let y=0;y<sh;y++){
+      for(let x=0;x<sw;x++){
+        const i=y*sw+x;
+        const ba=bg[i*4+3]/255;
+        const isSubject=ba<0.20;
+        dist[i]=isSubject?0:INF;
+        if(isSubject){subjectCount++; if(y<minY)minY=y; if(y>maxY)maxY=y;}
+      }
     }
-    pctx.putImageData(img,0,0);
 
-    const protectFull=offscreen(w,h), pfctx=protectFull.getContext('2d');
-    pfctx.imageSmoothingEnabled=true;
-    if('imageSmoothingQuality' in pfctx) pfctx.imageSmoothingQuality='high';
-    pfctx.drawImage(protectSmall,0,0,sw,sh,0,0,w,h);
-
-    const far=offscreen(w,h), fctx=far.getContext('2d');
-    fctx.drawImage(backgroundMask,0,0,w,h);
-    fctx.globalCompositeOperation='destination-out';
-    fctx.drawImage(protectFull,0,0,w,h);
-    fctx.globalCompositeOperation='source-over';
-
-    // 人物付近の背景が完全にぼけ側へ流れ込みにくいよう、
-    // 0に近い薄いアルファは切り落として far 領域を整理する。
-    const farImg=fctx.getImageData(0,0,w,h), fd=farImg.data;
-    for(let i=0;i<fd.length;i+=4){
-      const a=fd[i+3]/255;
-      let na=smoothstep(0.018,0.98,a);
-      if(na<0.008) na=0;
-      fd[i]=255; fd[i+1]=255; fd[i+2]=255; fd[i+3]=Math.round(na*255);
+    if(!subjectCount){
+      depthLayerCacheKey=cacheKey;
+      depthLayerCacheValue=null;
+      return null;
     }
-    fctx.putImageData(farImg,0,0);
 
-    depthMaskCacheKey=cacheKey;
-    depthMaskCacheValue=far;
-    return far;
+    const diag=1.41421356;
+    for(let y=0;y<sh;y++){
+      for(let x=0;x<sw;x++){
+        const i=y*sw+x;
+        let v=dist[i];
+        if(x>0) v=Math.min(v,dist[i-1]+1);
+        if(y>0) v=Math.min(v,dist[i-sw]+1);
+        if(x>0&&y>0) v=Math.min(v,dist[i-sw-1]+diag);
+        if(x<sw-1&&y>0) v=Math.min(v,dist[i-sw+1]+diag);
+        dist[i]=v;
+      }
+    }
+    for(let y=sh-1;y>=0;y--){
+      for(let x=sw-1;x>=0;x--){
+        const i=y*sw+x;
+        let v=dist[i];
+        if(x<sw-1) v=Math.min(v,dist[i+1]+1);
+        if(y<sh-1) v=Math.min(v,dist[i+sw]+1);
+        if(x<sw-1&&y<sh-1) v=Math.min(v,dist[i+sw+1]+diag);
+        if(x>0&&y<sh-1) v=Math.min(v,dist[i+sw-1]+diag);
+        dist[i]=v;
+      }
+    }
+
+    const focusBottom=Math.max(1,maxY);
+    const maxDim=Math.max(sw,sh);
+    const nearDist=maxDim*(0.018 + d*0.055);
+    const farDist=nearDist + maxDim*(0.12 + (1-d)*0.075);
+
+    // 累積マスク。後ろのレイヤーほど遠い背景だけに効く。
+    const thresholds=[[0.03,0.26],[0.20,0.48],[0.43,0.72],[0.67,0.96]];
+    const layers=thresholds.map(()=>offscreen(sw,sh));
+    const layerData=layers.map(c=>c.getContext('2d').createImageData(sw,sh));
+
+    for(let y=0;y<sh;y++){
+      const farByY=clamp01((focusBottom-y)/(sh*0.60));
+      const foregroundByY=clamp01((y-focusBottom)/(sh*0.32));
+      for(let x=0;x<sw;x++){
+        const i=y*sw+x, p=i*4;
+        const ba=bg[p+3]/255;
+        if(ba<=0.002) continue;
+
+        const radial=smoothstep(nearDist,farDist,dist[i]);
+        // 背景の上側は遠景になりやすい。下側は手前として少しボケを抑える。
+        let weight=radial*(0.48+0.52*farByY) + farByY*0.30;
+        if(y>focusBottom) weight*=0.55+0.25*foregroundByY;
+        weight=clamp01(weight*d + radial*(1-d)*0.55);
+
+        for(let k=0;k<layers.length;k++){
+          const [a,b]=thresholds[k];
+          const alpha=ba*smoothstep(a,b,weight);
+          const ld=layerData[k].data;
+          ld[p]=255; ld[p+1]=255; ld[p+2]=255; ld[p+3]=Math.round(alpha*255);
+        }
+      }
+    }
+
+    for(let k=0;k<layers.length;k++) layers[k].getContext('2d').putImageData(layerData[k],0,0);
+
+    depthLayerCacheKey=cacheKey;
+    depthLayerCacheValue={layers,sw,sh};
+    return depthLayerCacheValue;
   }
 
   function sharpenCanvas(source,w,h,amount){
@@ -740,6 +788,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
       contrast:effective.contrast/100,
       warmth:effective.warmth,
       glow:effective.glow,
+      aperture:+$('apertureF').value,
       blur:+$('blurStrength').value,
       depth:+$('depthOfField').value/100,
       subjectPop:effective.subjectPop
@@ -862,44 +911,39 @@ button:disabled{opacity:.55;cursor:not-allowed}
       const mctx=merged.getContext('2d');
       mctx.drawImage(filtered,0,0);
 
+      const aperture=apertureStrength(v.aperture);
+      // F1.4で最大、F16でかなり弱くなる。最大ボケ量はユーザーの上限調整。
+      const maxRadius=Math.max(0.6,v.blur*(0.18+aperture*1.22));
+
       if(v.depth<=0.001){
-        // 0は従来と完全に同じ「背景全体を均一にぼかす」動作。
-        const blurred=buildScaleBlur(filtered,w,h,v.blur);
-        const blurLayer=offscreen(w,h);
-        const bctx=blurLayer.getContext('2d');
+        const blurred=buildScaleBlur(filtered,w,h,maxRadius);
+        const blurLayer=offscreen(w,h), bctx=blurLayer.getContext('2d');
         bctx.drawImage(blurred,0,0);
         bctx.globalCompositeOperation='destination-in';
         bctx.drawImage(mask,0,0,w,h);
         bctx.globalCompositeOperation='source-over';
         mctx.drawImage(blurLayer,0,0);
       }else{
-        // 人物の近くは「できるだけ元画像のまま」残し、
-        // 離れた背景だけを強くぼかす。
-        // これで人物のすぐ近くまでぼけが乗りにくくなる。
-        const baseFactor=Math.max(0,0.42 - v.depth*0.42);
-        const baseRadius=v.blur*baseFactor;
-        if(baseRadius>=0.35){
-          const baseBlur=buildScaleBlur(filtered,w,h,baseRadius);
-          const baseLayer=offscreen(w,h), bctx=baseLayer.getContext('2d');
-          bctx.drawImage(baseBlur,0,0);
-          bctx.globalCompositeOperation='destination-in';
-          bctx.drawImage(mask,0,0,w,h);
-          bctx.globalCompositeOperation='source-over';
-          mctx.drawImage(baseLayer,0,0);
+        const depthInfo=buildProgressiveDepthLayers(mask,w,h,v.depth);
+        if(depthInfo){
+          const radii=[0.22,0.42,0.68,1.00].map(f=>Math.max(0.45,maxRadius*f));
+          for(let k=0;k<4;k++){
+            const blurred=buildScaleBlur(filtered,w,h,radii[k]);
+            const layer=offscreen(w,h), lctx=layer.getContext('2d');
+            lctx.drawImage(blurred,0,0);
+            lctx.globalCompositeOperation='destination-in';
+            lctx.imageSmoothingEnabled=true;
+            if('imageSmoothingQuality' in lctx) lctx.imageSmoothingQuality='high';
+            lctx.drawImage(depthInfo.layers[k],0,0,depthInfo.sw,depthInfo.sh,0,0,w,h);
+            lctx.globalCompositeOperation='source-over';
+            mctx.drawImage(layer,0,0);
+          }
         }
-
-        const farMask=buildDepthFarMask(mask,w,h,v.depth);
-        const farBlur=buildScaleBlur(filtered,w,h,v.blur);
-        const farLayer=offscreen(w,h), fctx=farLayer.getContext('2d');
-        fctx.drawImage(farBlur,0,0);
-        fctx.globalCompositeOperation='destination-in';
-        fctx.drawImage(farMask,0,0,w,h);
-        fctx.globalCompositeOperation='source-over';
-        mctx.drawImage(farLayer,0,0);
       }
       out=merged;
     }
 
+    // これは既存の「被写体くっきり」調整。背景ぼかし自体は人物の画素を変更しない。
     if(!interactive && v.subjectPop>0 && mask){
       out=applySubjectPop(out,w,h,mask,v.subjectPop);
     }
