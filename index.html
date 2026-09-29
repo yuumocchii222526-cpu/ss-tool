@@ -188,18 +188,28 @@ button:disabled{opacity:.55;cursor:not-allowed}
   <aside class="panel" id="panel" style="display:none;">
     <div class="group collapsible open" id="blurGroup">
       <button class="group-toggle" type="button" data-group-toggle aria-expanded="true" aria-controls="blurGroupBody">
-        <span class="group-toggle-main"><span class="group-toggle-title">背景ぼかし</span><span class="group-toggle-sub">人物判定 / F値 / 被写界深度 / 補正ブラシ</span></span>
+        <span class="group-toggle-main"><span class="group-toggle-title">背景ぼかし</span><span class="group-toggle-sub">人物判定 / AI深度マップ / F値 / 補正ブラシ</span></span>
         <span class="group-chevron">⌃</span>
       </button>
       <div class="group-body" id="blurGroupBody">
-      <p class="mini">人物を自動判定し、背景だけにレンズ風の段階ボケをかけます。画像は端末内で処理し、初回だけ人物判定モデルの読み込みにネット接続が必要です。</p>
+      <p class="mini">人物判定とAI深度マップを使って、背景だけに距離連動のレンズ風ボケをかけます。画像は端末内で処理し、初回だけ人物判定モデルと深度推定モデルの読み込みにネット接続が必要です。</p>
       <label class="check"><input type="checkbox" id="blurOn" checked> 背景ぼかしを使う</label>
       <div class="row"><span>絞り（F値）</span><input id="apertureF" type="range" min="1.4" max="16" step="0.1" value="2.8"><output id="apertureFOut">2.8</output></div>
       <p class="mini" style="margin-top:6px;">F値を小さくするとレンズの開放側になり、背景のボケが強くなります。</p>
       <div class="row"><span>最大ボケ量</span><input id="blurStrength" type="range" min="2" max="30" value="18"><output id="blurStrengthOut">18</output></div>
-      <div class="row"><span>被写界深度</span><input id="depthOfField" type="range" min="0" max="100" value="70"><output id="depthOfFieldOut">70</output></div>
+      <div class="row"><span>焦点深度</span><input id="focusDepth" type="range" min="0" max="100" value="35"><output id="focusDepthOut">35</output></div>
+      <div class="row"><span>被写界深度</span><input id="depthOfField" type="range" min="0" max="100" value="42"><output id="depthOfFieldOut">42</output></div>
       <div class="row"><span>境界なめらかさ</span><input id="edgeSoftness" type="range" min="0" max="100" value="48"><output id="edgeSoftnessOut">48</output></div>
-      <p class="mini" style="margin-top:6px;">被写界深度を上げるほど、人物の近くから遠景へ段階的にボケが強くなります。境界なめらかさは髪・耳・装飾まわりの切り抜き感を抑えます。</p>
+      <p class="mini" style="margin-top:6px;">焦点深度は 0=手前、100=奥です。被写界深度を上げるほどピントが合う範囲が広くなります。人物は背景ぼかしの対象外として保護します。</p>
+      <div class="small-actions" style="margin-top:8px;">
+        <button type="button" id="focusSubjectBtn">人物にピント</button>
+        <button type="button" id="toggleDepthPreview">深度マップを見る</button>
+      </div>
+      <div class="badge" style="margin-top:9px;"><span class="dot loading" id="depthDot"></span><span id="depthStatus">AI深度マップの準備中</span></div>
+      <div id="depthPreviewWrap" style="display:none;margin-top:10px;padding:8px;border:1px solid rgba(92,165,224,.22);border-radius:12px;background:rgba(245,251,255,.72);">
+        <canvas id="depthPreviewCanvas" style="display:block;width:100%;height:auto;border-radius:9px;background:#111;"></canvas>
+        <p class="mini" style="margin:7px 2px 0;">黒=手前 / 白=奥。Depth Anything V2 の相対深度を写真サイズへ補間しています。深度が逆に見える場合は、このプレビューをタップすると反転できます。</p>
+      </div>
       <label class="check"><input type="checkbox" id="correctionOn"> 補正ブラシを使う</label>
       <div class="small-actions">
         <button type="button" id="restoreBtn" class="active">鮮明に戻す</button>
@@ -276,7 +286,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
 <div class="toast info" id="toast" aria-live="polite" aria-atomic="true"><div class="toast-inner" id="toastText"></div></div>
 <input type="file" id="fileInput" class="fileInput" accept="image/*,.heic,.heif,image/heic,image/heif">
 <p class="footer-note">※ 人物判定は自動処理のため、髪・耳・手先・装飾などで境界が前後する場合があります。その場合は補正ブラシで微調整してください。背景ぼかしは自然寄りになるよう調整しています。</p>
-<div class="privacy-note"><strong>プライバシーについて</strong><br>このツールは、加工に使用する画像をサーバーへアップロードせず、お使いのPC・スマホのブラウザ内で処理する設計です。画像データが端末の外へ送信・保存されることはありません。人物判定用モデルの初回読み込み時のみインターネット接続が必要ですが、写真そのものは送信されません。プライバシーに配慮して安心してお使いいただけます。</div>
+<div class="privacy-note"><strong>プライバシーについて</strong><br>このツールは、加工に使用する画像をサーバーへアップロードせず、お使いのPC・スマホのブラウザ内で処理する設計です。画像データが端末の外へ送信・保存されることはありません。人物判定モデルとAI深度推定モデルの初回読み込み時のみインターネット接続が必要ですが、写真そのものは外部サーバーへアップロードされません。プライバシーに配慮して安心してお使いいただけます。</div>
 </div>
 <script>
 (() => {
@@ -284,16 +294,21 @@ button:disabled{opacity:.55;cursor:not-allowed}
   const MEDIAPIPE_VERSION = '0.10.14';
   const fileInput=$('fileInput'), pickerCard=$('pickerCard'), status=$('status'), panel=$('panel'), canvasWrap=$('canvasWrap'), canvas=$('canvas'), ctx=canvas.getContext('2d');
   const segDot=$('segDot'), segStatus=$('segStatus');
+  const depthDot=$('depthDot'), depthStatus=$('depthStatus'), depthPreviewCanvas=$('depthPreviewCanvas'), depthPreviewWrap=$('depthPreviewWrap');
   const viewerTools=$('viewerTools'), correctionBanner=$('correctionBanner'), correctionModeLabel=$('correctionModeLabel');
   const processingOverlay=$('processingOverlay'), overlayText=$('overlayText'), overlaySub=$('overlaySub');
   const stickySavebar=$('stickySavebar'), btnSaveSticky=$('btnSaveSticky'), btnShareSticky=$('btnShareSticky');
   const toastEl=$('toast'), toastText=$('toastText');
-  const sliderIds=['apertureF','blurStrength','depthOfField','edgeSoftness','brushSize','filterStrength','bright','sat','contrast','warmth','glow','subjectPop','copyrightOffsetX','copyrightOffsetY','copyrightScale','copyrightOpacity'];
+  const sliderIds=['apertureF','blurStrength','focusDepth','depthOfField','edgeSoftness','brushSize','filterStrength','bright','sat','contrast','warmth','glow','subjectPop','copyrightOffsetX','copyrightOffsetY','copyrightScale','copyrightOpacity'];
   sliderIds.forEach(id=>{const el=$(id), out=$(id+'Out'); out.textContent=el.value; el.addEventListener('input',()=>out.textContent=el.value);});
 
   let fullImg=null, fullW=0, fullH=0, workW=0, workH=0, srcCanvas=null;
   let showAfter=true, currentPreset='glow';
   let imageSegmenterInstance=null, autoBackgroundMask=null, segLoading=false, segError=null;
+  let depthEstimatorInstance=null, depthEstimatorPromise=null, depthComputePromise=null, depthLoading=false, depthError=null;
+  let aiDepthCanvas=null, aiDepthRevision=0, depthAutoFocused=false, depthManualInvert=false, depthOrientationChecked=false;
+  const DEPTH_MODEL_ID='onnx-community/depth-anything-v2-small';
+  const TRANSFORMERS_JS_URL='https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1';
 
   // 補正ブラシ用。v4ではこの宣言が抜けていたため、
   // 画像読み込み後の描画がReferenceErrorで停止していました。
@@ -319,6 +334,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
   let previewSourceCache=null;
   let maskRevision=0;
   const effectiveMaskCache=new Map();
+  const lensMaskCache=new Map();
   let depthMaskCacheKey='';
   let depthMaskCacheValue=null;
   let depthLayerCacheKey='';
@@ -362,6 +378,10 @@ button:disabled{opacity:.55;cursor:not-allowed}
       setOverlayVisible(true,'人物を判定中…','初回はモデル読み込みのため少し時間がかかることがあります。');
       return;
     }
+    if(depthLoading){
+      setOverlayVisible(true,'AI深度マップを生成中…','初回はDepth Anything V2のモデル読み込みに時間がかかることがあります。');
+      return;
+    }
     setOverlayVisible(false);
   }
 
@@ -374,6 +394,173 @@ button:disabled{opacity:.55;cursor:not-allowed}
     updateOverlayFromState();
   }
 
+
+  function updateDepthUI(message=''){
+    depthDot.className='dot';
+    if(depthLoading){
+      depthDot.classList.add('loading');
+      depthStatus.textContent=message||'AI深度マップを生成中…';
+    }else if(depthError){
+      depthDot.classList.add('error');
+      depthStatus.textContent='AI深度マップに失敗（軽量方式で継続）';
+    }else if(aiDepthCanvas){
+      depthStatus.textContent=message||'AI深度マップ準備完了';
+    }else{
+      depthDot.classList.add('loading');
+      depthStatus.textContent=message||'AI深度マップの準備中';
+    }
+    updateOverlayFromState();
+  }
+
+  function drawDepthPreview(){
+    if(!aiDepthCanvas) return;
+    const maxSide=620;
+    const scale=Math.min(1,maxSide/Math.max(aiDepthCanvas.width,aiDepthCanvas.height));
+    const w=Math.max(1,Math.round(aiDepthCanvas.width*scale));
+    const h=Math.max(1,Math.round(aiDepthCanvas.height*scale));
+    depthPreviewCanvas.width=w; depthPreviewCanvas.height=h;
+    const dctx=depthPreviewCanvas.getContext('2d');
+    dctx.imageSmoothingEnabled=true;
+    if('imageSmoothingQuality' in dctx) dctx.imageSmoothingQuality='high';
+    dctx.drawImage(aiDepthCanvas,0,0,aiDepthCanvas.width,aiDepthCanvas.height,0,0,w,h);
+  }
+
+  function invertDepthCanvas(canvas){
+    if(!canvas) return;
+    const cctx=canvas.getContext('2d');
+    const img=cctx.getImageData(0,0,canvas.width,canvas.height), d=img.data;
+    for(let i=0;i<d.length;i+=4){
+      const v=255-d[i];
+      d[i]=v;d[i+1]=v;d[i+2]=v;d[i+3]=255;
+    }
+    cctx.putImageData(img,0,0);
+  }
+
+  function sampleDepthForSubject(setSlider=true){
+    if(!aiDepthCanvas || !autoBackgroundMask) return null;
+    const maxSide=280;
+    const scale=Math.min(1,maxSide/Math.max(workW,workH));
+    const sw=Math.max(2,Math.round(workW*scale)), sh=Math.max(2,Math.round(workH*scale));
+    const dc=offscreen(sw,sh), mc=offscreen(sw,sh);
+    dc.getContext('2d').drawImage(aiDepthCanvas,0,0,aiDepthCanvas.width,aiDepthCanvas.height,0,0,sw,sh);
+    mc.getContext('2d').drawImage(autoBackgroundMask,0,0,workW,workH,0,0,sw,sh);
+    const dd=dc.getContext('2d').getImageData(0,0,sw,sh).data;
+    const md=mc.getContext('2d').getImageData(0,0,sw,sh).data;
+    const subject=[], background=[];
+    for(let i=0;i<dd.length;i+=4){
+      const bg=md[i+3]/255;
+      if(bg<0.22) subject.push(dd[i]);
+      else if(bg>0.86) background.push(dd[i]);
+    }
+    if(subject.length<20) return null;
+    subject.sort((a,b)=>a-b);
+    const s=subject[Math.floor(subject.length/2)];
+    if(background.length>20){
+      background.sort((a,b)=>a-b);
+      const b=background[Math.floor(background.length/2)];
+      // 深度マップは黒=手前、白=奥に統一する。
+      // 被写体の中央値が背景より明らかに白い場合だけ自動反転。
+      if(!depthManualInvert && !depthOrientationChecked && s>b+18){
+        depthOrientationChecked=true;
+        invertDepthCanvas(aiDepthCanvas);
+        aiDepthRevision++;
+        drawDepthPreview();
+        return sampleDepthForSubject(setSlider);
+      }
+    }
+    depthOrientationChecked=true;
+    const pct=Math.max(0,Math.min(100,Math.round((s/255)*100)));
+    if(setSlider){
+      $('focusDepth').value=pct;
+      $('focusDepthOut').textContent=pct;
+      requestRender('full');
+    }
+    return pct;
+  }
+
+  function maybeAutoFocusDepth(){
+    if(depthAutoFocused || !aiDepthCanvas || !autoBackgroundMask) return;
+    const v=sampleDepthForSubject(true);
+    if(v!==null) depthAutoFocused=true;
+  }
+
+  async function ensureDepthEstimatorLoaded(){
+    if(depthEstimatorInstance) return depthEstimatorInstance;
+    if(depthEstimatorPromise) return depthEstimatorPromise;
+    depthEstimatorPromise=(async()=>{
+      updateDepthUI('AI深度モデルを読み込み中…');
+      const {pipeline}=await import(TRANSFORMERS_JS_URL);
+      const pipe=await pipeline('depth-estimation',DEPTH_MODEL_ID,{
+        device:'wasm',
+        dtype:'q8',
+        progress_callback:(info)=>{
+          if(info && typeof info.progress==='number'){
+            updateDepthUI(`AI深度モデルを読み込み中… ${Math.round(info.progress)}%`);
+          }
+        }
+      });
+      depthEstimatorInstance=pipe;
+      return pipe;
+    })();
+    try{return await depthEstimatorPromise;}
+    finally{depthEstimatorPromise=null;}
+  }
+
+  async function _computeAIDepthMapInternal(){
+    if(!srcCanvas) return;
+    depthLoading=true; depthError=null; aiDepthCanvas=null; depthAutoFocused=false; updateDepthUI();
+    try{
+      const estimator=await ensureDepthEstimatorLoaded();
+      updateDepthUI('AI深度マップを解析中…');
+      const inferMax=1280;
+      const scale=Math.min(1,inferMax/Math.max(workW,workH));
+      const iw=Math.max(2,Math.round(workW*scale)), ih=Math.max(2,Math.round(workH*scale));
+      const input=offscreen(iw,ih), ictx=input.getContext('2d');
+      ictx.imageSmoothingEnabled=true;
+      if('imageSmoothingQuality' in ictx) ictx.imageSmoothingQuality='high';
+      ictx.drawImage(srcCanvas,0,0,workW,workH,0,0,iw,ih);
+      const blob=await new Promise((resolve,reject)=>input.toBlob(b=>b?resolve(b):reject(new Error('深度解析用画像を作成できませんでした')),'image/jpeg',0.92));
+      const url=URL.createObjectURL(blob);
+      let result;
+      try{ result=await estimator(url); }
+      finally{ URL.revokeObjectURL(url); }
+      if(!result || !result.depth || !result.depth.data) throw new Error('深度マップを取得できませんでした');
+      const raw=result.depth;
+      const rc=offscreen(raw.width,raw.height), rctx=rc.getContext('2d');
+      const img=rctx.createImageData(raw.width,raw.height), d=img.data;
+      // Depth Anything V2 の相対深度は近い側が大きくなりやすいため、
+      // まず反転して「黒=手前 / 白=奥」に統一する。人物マスク取得後に自動確認する。
+      for(let i=0;i<raw.width*raw.height;i++){
+        const srcV=raw.data[i];
+        const v=255-srcV;
+        const p=i*4; d[p]=v;d[p+1]=v;d[p+2]=v;d[p+3]=255;
+      }
+      rctx.putImageData(img,0,0);
+      aiDepthCanvas=offscreen(workW,workH);
+      const actx=aiDepthCanvas.getContext('2d');
+      actx.imageSmoothingEnabled=true;
+      if('imageSmoothingQuality' in actx) actx.imageSmoothingQuality='high';
+      actx.filter='blur(1.15px)';
+      actx.drawImage(rc,0,0,raw.width,raw.height,0,0,workW,workH);
+      actx.filter='none';
+      aiDepthRevision++;
+      drawDepthPreview();
+      updateDepthUI('AI深度マップ準備完了');
+      maybeAutoFocusDepth();
+      requestRender('full');
+    }catch(err){
+      console.error(err); depthError=String(err?.message||err); aiDepthCanvas=null; updateDepthUI(); requestRender('full');
+    }finally{
+      depthLoading=false; updateDepthUI(aiDepthCanvas?'AI深度マップ準備完了':'');
+    }
+  }
+
+  function computeAIDepthMap(){
+    if(depthComputePromise) return depthComputePromise;
+    depthComputePromise=_computeAIDepthMapInternal().finally(()=>{depthComputePromise=null;});
+    return depthComputePromise;
+  }
+
   function invalidatePreviewCache(){
     previewSourceCache=null;
   }
@@ -381,6 +568,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
   function bumpMaskRevision(){
     maskRevision++;
     effectiveMaskCache.clear();
+    lensMaskCache.clear();
     depthMaskCacheKey='';
     depthMaskCacheValue=null;
     depthLayerCacheKey='';
@@ -466,7 +654,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
       bumpMaskRevision();
     }catch(err){
       console.error(err);segError=String(err?.message||err);autoBackgroundMask=null;
-    }finally{segLoading=false;updateSegUI();render();}
+    }finally{segLoading=false;updateSegUI();maybeAutoFocusDepth();render();}
   }
 
   function remapBackgroundMaskAlpha(maskCanvas,w,h,low=0.34,high=0.78){
@@ -556,6 +744,44 @@ button:disabled{opacity:.55;cursor:not-allowed}
     }
     const refined=buildProtectedBackgroundMask(out,w,h);
     effectiveMaskCache.set(cacheKey,refined);
+    return refined;
+  }
+
+
+  // AI深度DOF用の背景マスク。
+  // 従来の保護帯より広げ過ぎず、髪・耳の縁だけを柔らかく保護する。
+  function buildLensBackgroundMask(w,h){
+    if(!autoBackgroundMask && !addBlurMask) return null;
+    const edge=Math.max(0,Math.min(1,+$('edgeSoftness').value/100));
+    const cacheKey=`${maskRevision}:${w}x${h}:lens:${Math.round(edge*100)}`;
+    if(lensMaskCache.has(cacheKey)) return lensMaskCache.get(cacheKey);
+    const base=offscreen(w,h), bctx=base.getContext('2d');
+    if(autoBackgroundMask) bctx.drawImage(autoBackgroundMask,0,0,workW,workH,0,0,w,h);
+    if(addBlurMask) bctx.drawImage(addBlurMask,0,0,workW,workH,0,0,w,h);
+    if(restoreSharpMask){
+      bctx.globalCompositeOperation='destination-out';
+      bctx.drawImage(restoreSharpMask,0,0,workW,workH,0,0,w,h);
+      bctx.globalCompositeOperation='source-over';
+    }
+    let refined=remapBackgroundMaskAlpha(base,w,h,0.30,0.82);
+    const subject=subjectMaskFromBackgroundMask(refined,w,h);
+    const grow=Math.max(1,Math.round(Math.max(w,h)*(0.0007+edge*0.0015)));
+    const expanded=expandAlphaMask(subject,w,h,grow);
+    const protect=offscreen(w,h), pctx=protect.getContext('2d');
+    const feather=Math.max(1.2,Math.max(w,h)*(0.0012+edge*0.0023));
+    pctx.filter=`blur(${feather}px)`;
+    pctx.drawImage(expanded,0,0,w,h);
+    pctx.filter='none';
+    const cut=offscreen(w,h), cctx=cut.getContext('2d');
+    cctx.drawImage(refined,0,0,w,h);
+    cctx.globalCompositeOperation='destination-out';
+    cctx.globalAlpha=0.72;
+    cctx.drawImage(protect,0,0,w,h);
+    cctx.globalAlpha=1;
+    cctx.globalCompositeOperation='source-over';
+    refined=softenMaskEdge(cut,w,h,1.1+edge*2.6);
+    refined=remapBackgroundMaskAlpha(refined,w,h,0.035,0.97);
+    lensMaskCache.set(cacheKey,refined);
     return refined;
   }
 
@@ -702,6 +928,122 @@ button:disabled{opacity:.55;cursor:not-allowed}
     return depthLayerCacheValue;
   }
 
+
+  let dofGLState=null;
+  function getDofGLState(){
+    if(dofGLState) return dofGLState;
+    const glCanvas=document.createElement('canvas');
+    const gl=glCanvas.getContext('webgl2',{alpha:true,premultipliedAlpha:false,antialias:false,preserveDrawingBuffer:true});
+    if(!gl) return null;
+    const vs=`#version 300 es
+precision highp float;
+in vec2 a_pos;
+in vec2 a_uv;
+out vec2 v_uv;
+void main(){v_uv=a_uv;gl_Position=vec4(a_pos,0.0,1.0);}`;
+    const fs=`#version 300 es
+precision highp float;
+uniform sampler2D u_image;
+uniform sampler2D u_depth;
+uniform sampler2D u_mask;
+uniform vec2 u_texel;
+uniform float u_focus;
+uniform float u_dof;
+uniform float u_aperture;
+uniform float u_maxRadius;
+in vec2 v_uv;
+out vec4 outColor;
+const int N=24;
+const vec2 OFF[N]=vec2[N](
+ vec2(0.000,0.000), vec2(0.527,0.085), vec2(-0.040,0.536), vec2(-0.550,0.025),
+ vec2(-0.260,-0.520), vec2(0.410,-0.450), vec2(0.820,0.300), vec2(0.250,0.850),
+ vec2(-0.650,0.650), vec2(-0.900,-0.220), vec2(-0.350,-0.880), vec2(0.580,-0.760),
+ vec2(0.980,-0.080), vec2(0.760,0.640), vec2(0.080,0.990), vec2(-0.720,0.820),
+ vec2(-0.990,0.180), vec2(-0.760,-0.620), vec2(-0.080,-0.990), vec2(0.720,-0.820),
+ vec2(0.360,0.250), vec2(-0.310,0.310), vec2(-0.300,-0.300), vec2(0.300,-0.320));
+void main(){
+ vec4 src=texture(u_image,v_uv);
+ float mask=texture(u_mask,v_uv).a;
+ if(mask<0.015){outColor=src;return;}
+ float z=texture(u_depth,v_uv).r;
+ float focusBand=mix(0.010,0.155,u_dof);
+ float delta=abs(z-u_focus);
+ float coc=smoothstep(focusBand,focusBand+0.30,delta);
+ if(z<u_focus) coc*=0.78;
+ float radius=u_maxRadius*u_aperture*coc;
+ if(radius<0.30){outColor=src;return;}
+ vec3 sum=src.rgb;
+ float total=1.0;
+ for(int i=1;i<N;i++){
+   vec2 suv=clamp(v_uv+OFF[i]*u_texel*radius,vec2(0.001),vec2(0.999));
+   float sm=texture(u_mask,suv).a;
+   if(sm<0.08) continue;
+   float sz=texture(u_depth,suv).r;
+   float depthCompat=1.0-smoothstep(0.07,0.34,abs(sz-z));
+   float w=smoothstep(0.08,0.72,sm)*(0.32+0.68*depthCompat);
+   sum+=texture(u_image,suv).rgb*w;
+   total+=w;
+ }
+ vec3 blurred=sum/max(total,0.001);
+ float edge=smoothstep(0.035,0.92,mask);
+ float mixAmt=coc*edge;
+ outColor=vec4(mix(src.rgb,blurred,mixAmt),src.a);
+}`;
+    function compile(type,src){const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(s)||'shader compile failed');return s;}
+    try{
+      const program=gl.createProgram();
+      gl.attachShader(program,compile(gl.VERTEX_SHADER,vs));
+      gl.attachShader(program,compile(gl.FRAGMENT_SHADER,fs));
+      gl.linkProgram(program);
+      if(!gl.getProgramParameter(program,gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program)||'shader link failed');
+      const verts=new Float32Array([
+        -1,-1, 0,1,   1,-1, 1,1,  -1,1, 0,0,
+        -1,1, 0,0,    1,-1, 1,1,   1,1, 1,0
+      ]);
+      const buffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buffer);gl.bufferData(gl.ARRAY_BUFFER,verts,gl.STATIC_DRAW);
+      const stride=4*4;
+      const aPos=gl.getAttribLocation(program,'a_pos'), aUv=gl.getAttribLocation(program,'a_uv');
+      gl.enableVertexAttribArray(aPos);gl.vertexAttribPointer(aPos,2,gl.FLOAT,false,stride,0);
+      gl.enableVertexAttribArray(aUv);gl.vertexAttribPointer(aUv,2,gl.FLOAT,false,stride,2*4);
+      const tex=[gl.createTexture(),gl.createTexture(),gl.createTexture()];
+      dofGLState={glCanvas,gl,program,buffer,tex};
+      return dofGLState;
+    }catch(err){console.error('WebGL DOF init failed',err);return null;}
+  }
+
+  function uploadDofTexture(gl,tex,unit,source){
+    gl.activeTexture(gl.TEXTURE0+unit);gl.bindTexture(gl.TEXTURE_2D,tex);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,source);
+  }
+
+  function applyDepthAwareDofWebGL(source,depthCanvas,backgroundMask,w,h,v){
+    if(!source||!depthCanvas||!backgroundMask) return null;
+    const state=getDofGLState(); if(!state) return null;
+    const {glCanvas,gl,program,tex}=state;
+    glCanvas.width=w;glCanvas.height=h;gl.viewport(0,0,w,h);gl.useProgram(program);
+    uploadDofTexture(gl,tex[0],0,source);
+    uploadDofTexture(gl,tex[1],1,depthCanvas);
+    uploadDofTexture(gl,tex[2],2,backgroundMask);
+    gl.uniform1i(gl.getUniformLocation(program,'u_image'),0);
+    gl.uniform1i(gl.getUniformLocation(program,'u_depth'),1);
+    gl.uniform1i(gl.getUniformLocation(program,'u_mask'),2);
+    gl.uniform2f(gl.getUniformLocation(program,'u_texel'),1/w,1/h);
+    gl.uniform1f(gl.getUniformLocation(program,'u_focus'),Math.max(0,Math.min(1,v.focus)));
+    gl.uniform1f(gl.getUniformLocation(program,'u_dof'),Math.max(0,Math.min(1,v.depth)));
+    const aperture=0.12+apertureStrength(v.aperture)*1.18;
+    gl.uniform1f(gl.getUniformLocation(program,'u_aperture'),aperture);
+    gl.uniform1f(gl.getUniformLocation(program,'u_maxRadius'),Math.max(1,v.blur));
+    gl.disable(gl.BLEND);gl.drawArrays(gl.TRIANGLES,0,6);
+    const out=offscreen(w,h), octx=out.getContext('2d');
+    octx.drawImage(glCanvas,0,0,w,h);
+    return out;
+  }
+
   function sharpenCanvas(source,w,h,amount){
     const srcC=offscreen(w,h);
     const sctx=srcC.getContext('2d');
@@ -790,6 +1132,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
       glow:effective.glow,
       aperture:+$('apertureF').value,
       blur:+$('blurStrength').value,
+      focus:+$('focusDepth').value/100,
       depth:+$('depthOfField').value/100,
       subjectPop:effective.subjectPop
     };
@@ -907,40 +1250,47 @@ button:disabled{opacity:.55;cursor:not-allowed}
     let out=filtered;
 
     if($('blurOn').checked && mask){
-      const merged=offscreen(w,h);
-      const mctx=merged.getContext('2d');
-      mctx.drawImage(filtered,0,0);
+      // AI深度マップがある場合は WebGL2 の深度依存 Circle-of-Confusion 方式を優先。
+      // 人物マスク外だけをサンプリングし、輪郭への背景色の滲みを抑える。
+      if(aiDepthCanvas){
+        const depthOut=applyDepthAwareDofWebGL(filtered,aiDepthCanvas,mask,w,h,v);
+        if(depthOut) out=depthOut;
+      }
 
-      const aperture=apertureStrength(v.aperture);
-      // F1.4で最大、F16でかなり弱くなる。最大ボケ量はユーザーの上限調整。
-      const maxRadius=Math.max(0.6,v.blur*(0.18+aperture*1.22));
-
-      if(v.depth<=0.001){
-        const blurred=buildScaleBlur(filtered,w,h,maxRadius);
-        const blurLayer=offscreen(w,h), bctx=blurLayer.getContext('2d');
-        bctx.drawImage(blurred,0,0);
-        bctx.globalCompositeOperation='destination-in';
-        bctx.drawImage(mask,0,0,w,h);
-        bctx.globalCompositeOperation='source-over';
-        mctx.drawImage(blurLayer,0,0);
-      }else{
-        const depthInfo=buildProgressiveDepthLayers(mask,w,h,v.depth);
-        if(depthInfo){
-          const radii=[0.22,0.42,0.68,1.00].map(f=>Math.max(0.45,maxRadius*f));
-          for(let k=0;k<4;k++){
-            const blurred=buildScaleBlur(filtered,w,h,radii[k]);
-            const layer=offscreen(w,h), lctx=layer.getContext('2d');
-            lctx.drawImage(blurred,0,0);
-            lctx.globalCompositeOperation='destination-in';
-            lctx.imageSmoothingEnabled=true;
-            if('imageSmoothingQuality' in lctx) lctx.imageSmoothingQuality='high';
-            lctx.drawImage(depthInfo.layers[k],0,0,depthInfo.sw,depthInfo.sh,0,0,w,h);
-            lctx.globalCompositeOperation='source-over';
-            mctx.drawImage(layer,0,0);
+      // WebGL2非対応 / 深度推定前は、従来の軽量プログレッシブ方式へフォールバック。
+      if(out===filtered){
+        const merged=offscreen(w,h);
+        const mctx=merged.getContext('2d');
+        mctx.drawImage(filtered,0,0);
+        const aperture=apertureStrength(v.aperture);
+        const maxRadius=Math.max(0.6,v.blur*(0.18+aperture*1.22));
+        if(v.depth<=0.001){
+          const blurred=buildScaleBlur(filtered,w,h,maxRadius);
+          const blurLayer=offscreen(w,h), bctx=blurLayer.getContext('2d');
+          bctx.drawImage(blurred,0,0);
+          bctx.globalCompositeOperation='destination-in';
+          bctx.drawImage(mask,0,0,w,h);
+          bctx.globalCompositeOperation='source-over';
+          mctx.drawImage(blurLayer,0,0);
+        }else{
+          const depthInfo=buildProgressiveDepthLayers(mask,w,h,v.depth);
+          if(depthInfo){
+            const radii=[0.22,0.42,0.68,1.00].map(f=>Math.max(0.45,maxRadius*f));
+            for(let k=0;k<4;k++){
+              const blurred=buildScaleBlur(filtered,w,h,radii[k]);
+              const layer=offscreen(w,h), lctx=layer.getContext('2d');
+              lctx.drawImage(blurred,0,0);
+              lctx.globalCompositeOperation='destination-in';
+              lctx.imageSmoothingEnabled=true;
+              if('imageSmoothingQuality' in lctx) lctx.imageSmoothingQuality='high';
+              lctx.drawImage(depthInfo.layers[k],0,0,depthInfo.sw,depthInfo.sh,0,0,w,h);
+              lctx.globalCompositeOperation='source-over';
+              mctx.drawImage(layer,0,0);
+            }
           }
         }
+        out=merged;
       }
-      out=merged;
     }
 
     // これは既存の「被写体くっきり」調整。背景ぼかし自体は人物の画素を変更しない。
@@ -961,7 +1311,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
       return;
     }
     const sourceInfo=usePreview ? getPreviewSource() : {canvas:srcCanvas,w:workW,h:workH};
-    const effective=buildEffectiveBackgroundMask(sourceInfo.w,sourceInfo.h);
+    const effective=aiDepthCanvas?buildLensBackgroundMask(sourceInfo.w,sourceInfo.h):buildEffectiveBackgroundMask(sourceInfo.w,sourceInfo.h);
     const out=composeProcessed(sourceInfo.canvas,sourceInfo.w,sourceInfo.h,effective,usePreview);
     if(usePreview && (sourceInfo.w!==workW || sourceInfo.h!==workH)) ctx.drawImage(out,0,0,sourceInfo.w,sourceInfo.h,0,0,workW,workH);
     else ctx.drawImage(out,0,0);
@@ -1028,6 +1378,8 @@ button:disabled{opacity:.55;cursor:not-allowed}
       maskPaintCtx.clearRect(0,0,workW,workH);
       invalidatePreviewCache();
       effectiveMaskCache.clear();
+      lensMaskCache.clear();
+      aiDepthCanvas=null;depthError=null;depthAutoFocused=false;depthManualInvert=false;depthOrientationChecked=false;aiDepthRevision++;updateDepthUI();
         maskRevision=0;
       addBlurMask=null;
       restoreSharpMask=null;
@@ -1037,6 +1389,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
       autoBackgroundMask=null;segError=null;updateSegUI();
       applyPreset(currentPreset);
       computeAutoBackgroundMask();
+      computeAIDepthMap();
     }catch(err){setStatus('読み込み失敗\n'+(err&&err.message?err.message:String(err))+'\n\nHEICの場合はJPEG/PNGで試してください。');}
   });
 
@@ -1059,6 +1412,20 @@ button:disabled{opacity:.55;cursor:not-allowed}
     el.addEventListener('change',finish);
     el.addEventListener('pointerup',finish);
     el.addEventListener('touchend',finish,{passive:true});
+  });
+  $('focusSubjectBtn').addEventListener('click',()=>{if(sampleDepthForSubject(true)===null) showToast('人物とAI深度マップの準備後に使えます。','info');});
+  $('toggleDepthPreview').addEventListener('click',()=>{
+    if(!aiDepthCanvas){showToast('AI深度マップを生成中です。','info');return;}
+    const show=depthPreviewWrap.style.display==='none';
+    depthPreviewWrap.style.display=show?'block':'none';
+    $('toggleDepthPreview').textContent=show?'深度マップを隠す':'深度マップを見る';
+    if(show) drawDepthPreview();
+  });
+  depthPreviewCanvas.addEventListener('click',()=>{
+    if(!aiDepthCanvas) return;
+    depthManualInvert=!depthManualInvert;depthOrientationChecked=true;
+    invertDepthCanvas(aiDepthCanvas);aiDepthRevision++;drawDepthPreview();requestRender('full');
+    showToast('深度マップを反転しました。','info');
   });
   $('correctionOn').addEventListener('change',()=>{if(!$('correctionOn').checked){painting=false;lastPaint=null;paintRect=null;queuedPaintPoint=null;if(paintRafId){cancelAnimationFrame(paintRafId);paintRafId=0;}maskPaintCtx.clearRect(0,0,workW,workH);}updateCorrectionUI();});
   $('restoreBtn').addEventListener('click',()=>{correctionMode='restore';updateCorrectionUI();});
@@ -1346,8 +1713,17 @@ button:disabled{opacity:.55;cursor:not-allowed}
   }
 
   async function ensureMaskReadyForSave(){
-    if($('blurOn').checked && !autoBackgroundMask && !segLoading){
-      await computeAutoBackgroundMask();
+    if(!$('blurOn').checked) return;
+    if(!autoBackgroundMask){
+      if(segLoading){
+        while(segLoading) await new Promise(r=>setTimeout(r,60));
+      }else{
+        await computeAutoBackgroundMask();
+      }
+    }
+    if(!aiDepthCanvas && !depthError){
+      if(depthComputePromise) await depthComputePromise;
+      else await computeAIDepthMap();
     }
   }
 
