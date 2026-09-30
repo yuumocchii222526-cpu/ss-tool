@@ -203,7 +203,9 @@ button:disabled{opacity:.55;cursor:not-allowed}
       <div class="row" style="align-items:flex-start;"><span style="padding-top:10px;">ボケ形状</span><select id="bokehShape" aria-label="ボケ形状"><option value="off">なし</option><option value="circle" selected>円形</option><option value="star">星型</option><option value="hexagon">六角形</option></select></div>
       <div class="row"><span>形状サイズ</span><input id="bokehSize" type="range" min="0" max="100" value="34"><output id="bokehSizeOut">34</output></div>
       <div class="row"><span>玉ボケ明るさ</span><input id="bokehIntensity" type="range" min="0" max="100" value="48"><output id="bokehIntensityOut">48</output></div>
-      <p class="mini" style="margin-top:6px;">焦点深度は 0=手前、100=奥です。被写界深度を上げるほどピントが合う範囲が広くなります。人物は背景ぼかしの対象外として保護します。選んだボケ形状は、奥側にある明るい背景ハイライトを円形・星型・六角形の光として広げます。</p>
+      <div class="row"><span>ボケ密度</span><input id="bokehDensity" type="range" min="0" max="100" value="62"><output id="bokehDensityOut">62</output></div>
+      <div class="row"><span>色にじみ</span><input id="bokehFringe" type="range" min="0" max="100" value="26"><output id="bokehFringeOut">26</output></div>
+      <p class="mini" style="margin-top:6px;">焦点深度は 0=手前、100=奥です。被写界深度を上げるほどピントが合う範囲が広くなります。人物は背景ぼかしの対象外として保護します。選んだボケ形状は、奥側にある明るい背景ハイライトを円形・星型・六角形の光として広げます。ボケ密度でサンプル量、色にじみで色収差の強さを調整できます。</p>
       <div class="small-actions" style="margin-top:8px;">
         <button type="button" id="focusSubjectBtn">人物にピント</button>
         <button type="button" id="toggleDepthPreview">深度マップを見る</button>
@@ -302,7 +304,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
   const processingOverlay=$('processingOverlay'), overlayText=$('overlayText'), overlaySub=$('overlaySub');
   const stickySavebar=$('stickySavebar'), btnSaveSticky=$('btnSaveSticky'), btnShareSticky=$('btnShareSticky');
   const toastEl=$('toast'), toastText=$('toastText');
-  const sliderIds=['apertureF','blurStrength','focusDepth','depthOfField','edgeSoftness','bokehSize','bokehIntensity','brushSize','filterStrength','bright','sat','contrast','warmth','glow','subjectPop','copyrightOffsetX','copyrightOffsetY','copyrightScale','copyrightOpacity'];
+  const sliderIds=['apertureF','blurStrength','focusDepth','depthOfField','edgeSoftness','bokehSize','bokehIntensity','bokehDensity','bokehFringe','brushSize','filterStrength','bright','sat','contrast','warmth','glow','subjectPop','copyrightOffsetX','copyrightOffsetY','copyrightScale','copyrightOpacity'];
   sliderIds.forEach(id=>{const el=$(id), out=$(id+'Out'); out.textContent=el.value; el.addEventListener('input',()=>out.textContent=el.value);});
 
   let fullImg=null, fullW=0, fullH=0, workW=0, workH=0, srcCanvas=null;
@@ -1076,6 +1078,61 @@ void main(){
     return (data[idx]*0.2126 + data[idx+1]*0.7152 + data[idx+2]*0.0722)/255;
   }
 
+  function drawBokehElement(ctx,shape,c,radius,alpha,fringePx){
+    const cr=Math.min(255, c.r*1.05 + 18);
+    const cg=Math.min(255, c.g*1.05 + 18);
+    const cb=Math.min(255, c.b*1.05 + 18);
+
+    ctx.save();
+    ctx.translate(c.x,c.y);
+    if(shape==='hexagon') ctx.rotate((c.x*0.013 + c.y*0.009)%Math.PI);
+    else if(shape==='star') ctx.rotate((c.x*0.017 + c.y*0.011)%Math.PI);
+
+    // Core colored bokeh body
+    ctx.beginPath();
+    drawShapePath(ctx,shape,radius);
+    const grad=ctx.createRadialGradient(0,0,0,0,0,radius);
+    grad.addColorStop(0,`rgba(${Math.min(255,cr+8)},${Math.min(255,cg+8)},${Math.min(255,cb+8)},${Math.min(0.98,alpha*1.05)})`);
+    grad.addColorStop(0.42,`rgba(${cr},${cg},${cb},${alpha*0.88})`);
+    grad.addColorStop(0.78,`rgba(${cr},${cg},${cb},${alpha*0.34})`);
+    grad.addColorStop(1,`rgba(${cr},${cg},${cb},0)`);
+    ctx.fillStyle=grad;
+    ctx.fill();
+
+    // Small specular core for a more photographic glittering highlight.
+    ctx.beginPath();
+    drawShapePath(ctx,shape,radius*0.34);
+    const core=ctx.createRadialGradient(0,0,0,0,0,radius*0.34);
+    core.addColorStop(0,`rgba(255,255,255,${Math.min(0.92,alpha*0.95)})`);
+    core.addColorStop(1,'rgba(255,255,255,0)');
+    ctx.fillStyle=core;
+    ctx.fill();
+
+    // Chromatic fringe: subtle RGB edge offsets, mainly on the rim.
+    if(fringePx>0.05){
+      const lineW=Math.max(0.7, radius*0.08 + fringePx*0.9);
+      const edgeAlpha=Math.min(0.34, alpha*0.30 + fringePx*0.022);
+      const offsets=[
+        {dx: fringePx*0.90, dy:-fringePx*0.30, color:`rgba(255,88,88,${edgeAlpha})`},
+        {dx: 0, dy: fringePx*0.20, color:`rgba(130,255,170,${edgeAlpha*0.70})`},
+        {dx:-fringePx*0.95, dy: fringePx*0.36, color:`rgba(110,170,255,${edgeAlpha})`}
+      ];
+      ctx.globalCompositeOperation='lighter';
+      for(const o of offsets){
+        ctx.save();
+        ctx.translate(o.dx,o.dy);
+        ctx.beginPath();
+        drawShapePath(ctx,shape,Math.max(1, radius - lineW*0.18));
+        ctx.strokeStyle=o.color;
+        ctx.lineWidth=lineW;
+        ctx.stroke();
+        ctx.restore();
+      }
+      ctx.globalCompositeOperation='source-over';
+    }
+    ctx.restore();
+  }
+
   function applyBokehShapes(base,source,depthCanvas,backgroundMask,w,h,v,interactive=false){
     if(!base || !source || !depthCanvas || !backgroundMask) return base;
     if(v.bokehShape==='off' || v.bokehSize<=0 || v.bokehIntensity<=0.001) return base;
@@ -1087,12 +1144,17 @@ void main(){
     const depthData=dctx.getImageData(0,0,w,h).data;
     const maskData=mctx.getImageData(0,0,w,h).data;
 
-    const threshold=Math.max(0.54,0.74 - v.bokehIntensity*0.18);
+    const density=Math.max(0,Math.min(1,v.bokehDensity));
+    const fringe=Math.max(0,Math.min(1,v.bokehFringe));
+    const threshold=Math.max(0.50, 0.76 - v.bokehIntensity*0.22 - density*0.09);
     const focusBand=0.010 + (0.155-0.010)*Math.max(0,Math.min(1,v.depth));
     const aperture=0.12 + apertureStrength(v.aperture)*1.18;
-    const step=Math.max(3, Math.round(Math.min(8, Math.max(4, 9 - v.bokehSize*0.05))));
-    const radiusBase=Math.max(5, (v.bokehSize*0.20) + (v.blur*0.34) + aperture*4.2);
-    const maxCandidates=interactive ? 90 : Math.min(360, Math.max(150, Math.round((w*h)/(step*step*52))));
+    const stepBase=8 - density*6.2;
+    const step=Math.max(1, Math.round(interactive ? Math.max(2,stepBase+1.5) : stepBase));
+    const radiusBase=Math.max(5, (v.bokehSize*0.18) + (v.blur*0.36) + aperture*4.2);
+    const maxCandidates=interactive
+      ? Math.min(260, Math.max(100, Math.round((w*h)/(step*step*210))))
+      : Math.min(2400, Math.max(320, Math.round((w*h)/(step*step*18))));
     const candidates=[];
 
     for(let y=2; y<h-2; y+=step){
@@ -1104,23 +1166,23 @@ void main(){
         const delta=z-v.focus;
         if(delta<=focusBand*0.18) continue;
         const coc=smoothstep(focusBand, focusBand+0.30, Math.abs(z-v.focus));
-        if(coc<0.16) continue;
+        if(coc<0.12) continue;
         const lum=getPixelLuma(srcData,idx);
         if(lum<threshold) continue;
 
         const left=getPixelLuma(srcData,idx-4), right=getPixelLuma(srcData,idx+4), up=getPixelLuma(srcData,idx-w*4), down=getPixelLuma(srcData,idx+w*4);
         const localAvg=(left+right+up+down)*0.25;
         const prominence=lum-localAvg;
-        if(prominence<0.010 && lum<0.90) continue;
+        if(prominence<0.006 && lum<0.86) continue;
 
         const farFactor=smoothstep(v.focus+focusBand*0.35,1.0,z);
-        const strength=((lum-threshold)/Math.max(0.0001,1-threshold)) * (0.42+0.58*coc) * (0.25+0.75*farFactor) * (0.35+0.65*maskA);
-        if(strength<=0.02) continue;
+        const strength=((lum-threshold)/Math.max(0.0001,1-threshold)) * (0.38+0.62*coc) * (0.22+0.78*farFactor) * (0.30+0.70*maskA);
+        if(strength<=0.016) continue;
 
         candidates.push({
           x,y,z,coc,lum,
           r:srcData[idx],g:srcData[idx+1],b:srcData[idx+2],
-          score:strength + prominence*0.35
+          score:strength + prominence*0.42
         });
       }
     }
@@ -1133,32 +1195,22 @@ void main(){
     const octx=overlay.getContext('2d');
     octx.imageSmoothingEnabled=true;
     if('imageSmoothingQuality' in octx) octx.imageSmoothingQuality='high';
+    octx.globalCompositeOperation='lighter';
+
+    const fringePxBase=fringe * (0.4 + radiusBase*0.08 + v.bokehSize*0.018);
 
     for(const c of selected){
-      const radius=radiusBase*(0.72 + c.coc*1.15) * (0.84 + c.score*0.42);
-      const alpha=Math.min(0.92, (0.14 + v.bokehIntensity*0.62) * (0.32 + c.score*0.85));
-      const cr=Math.min(255, c.r*1.04 + 16);
-      const cg=Math.min(255, c.g*1.04 + 16);
-      const cb=Math.min(255, c.b*1.04 + 16);
-      octx.save();
-      octx.translate(c.x,c.y);
-      if(v.bokehShape==='hexagon') octx.rotate((c.x*0.013 + c.y*0.009)%Math.PI);
-      else if(v.bokehShape==='star') octx.rotate((c.x*0.017 + c.y*0.011)%Math.PI);
-      octx.beginPath();
-      drawShapePath(octx,v.bokehShape,radius);
-      const grad=octx.createRadialGradient(0,0,0,0,0,radius);
-      grad.addColorStop(0,`rgba(${cr},${cg},${cb},${alpha})`);
-      grad.addColorStop(0.55,`rgba(${cr},${cg},${cb},${alpha*0.72})`);
-      grad.addColorStop(1,`rgba(${cr},${cg},${cb},0)`);
-      octx.fillStyle=grad;
-      octx.fill();
-      octx.restore();
+      const radius=radiusBase*(0.70 + c.coc*1.18) * (0.82 + c.score*0.48);
+      const alpha=Math.min(0.98, (0.10 + v.bokehIntensity*0.66) * (0.26 + c.score*0.98));
+      const fringePx=fringePxBase * (0.55 + c.coc*0.85);
+      drawBokehElement(octx,v.bokehShape,c,radius,alpha,fringePx);
     }
 
     const softened=offscreen(w,h);
     const sfctx=softened.getContext('2d');
-    const blurPx=Math.max(0.6, radiusBase*0.09);
+    const blurPx=Math.max(0.35, radiusBase*(0.045 + fringe*0.028));
     if('filter' in sfctx) sfctx.filter=`blur(${blurPx.toFixed(2)}px)`;
+    sfctx.globalCompositeOperation='lighter';
     sfctx.drawImage(overlay,0,0);
     if('filter' in sfctx) sfctx.filter='none';
     sfctx.globalCompositeOperation='destination-in';
@@ -1168,8 +1220,8 @@ void main(){
     const out=offscreen(w,h);
     const outCtx=out.getContext('2d');
     outCtx.drawImage(base,0,0);
-    outCtx.globalCompositeOperation='screen';
-    outCtx.globalAlpha=Math.min(0.95, 0.24 + v.bokehIntensity*0.72);
+    outCtx.globalCompositeOperation='lighter';
+    outCtx.globalAlpha=Math.min(1, 0.16 + v.bokehIntensity*0.88);
     outCtx.drawImage(softened,0,0);
     outCtx.globalAlpha=1;
     outCtx.globalCompositeOperation='source-over';
@@ -1269,6 +1321,8 @@ void main(){
       bokehShape:$('bokehShape').value,
       bokehSize:+$('bokehSize').value,
       bokehIntensity:+$('bokehIntensity').value/100,
+      bokehDensity:+$('bokehDensity').value/100,
+      bokehFringe:+$('bokehFringe').value/100,
       subjectPop:effective.subjectPop
     };
   }
@@ -1536,7 +1590,7 @@ void main(){
   $('btnAfterStage').addEventListener('click',()=>{showAfter=true;updateViewButtons();requestRender('full');});
   $('blurOn').addEventListener('change',()=>requestRender('full'));
   $('bokehShape').addEventListener('change',()=>{showAfter=true;updateViewButtons();requestRender('full');});
-  const visualControlIds=new Set(['filterStrength','bright','sat','contrast','warmth','glow','subjectPop','bokehSize','bokehIntensity']);
+  const visualControlIds=new Set(['filterStrength','bright','sat','contrast','warmth','glow','subjectPop','bokehSize','bokehIntensity','bokehDensity','bokehFringe']);
   function ensureAfterViewForAdjustment(id){
     if(!visualControlIds.has(id)) return;
     if(!showAfter){
