@@ -958,41 +958,53 @@ uniform float u_aperture;
 uniform float u_maxRadius;
 in vec2 v_uv;
 out vec4 outColor;
-const int N=24;
+const int N=32;
 const vec2 OFF[N]=vec2[N](
- vec2(0.000,0.000), vec2(0.527,0.085), vec2(-0.040,0.536), vec2(-0.550,0.025),
- vec2(-0.260,-0.520), vec2(0.410,-0.450), vec2(0.820,0.300), vec2(0.250,0.850),
- vec2(-0.650,0.650), vec2(-0.900,-0.220), vec2(-0.350,-0.880), vec2(0.580,-0.760),
- vec2(0.980,-0.080), vec2(0.760,0.640), vec2(0.080,0.990), vec2(-0.720,0.820),
- vec2(-0.990,0.180), vec2(-0.760,-0.620), vec2(-0.080,-0.990), vec2(0.720,-0.820),
- vec2(0.360,0.250), vec2(-0.310,0.310), vec2(-0.300,-0.300), vec2(0.300,-0.320));
+ vec2(0.000,0.000), vec2(0.245,-0.027), vec2(-0.180,0.175), vec2(0.014,0.252),
+ vec2(-0.260,-0.030), vec2(-0.040,-0.250), vec2(0.188,-0.184), vec2(0.456,0.094),
+ vec2(0.250,0.390), vec2(-0.082,0.500), vec2(-0.410,0.260), vec2(-0.510,-0.050),
+ vec2(-0.300,-0.410), vec2(0.060,-0.500), vec2(0.392,-0.314), vec2(0.690,0.020),
+ vec2(0.530,0.454), vec2(0.132,0.735), vec2(-0.330,0.640), vec2(-0.690,0.300),
+ vec2(-0.760,-0.080), vec2(-0.520,-0.520), vec2(-0.120,-0.760), vec2(0.360,-0.680),
+ vec2(0.760,-0.280), vec2(0.930,0.080), vec2(0.760,0.470), vec2(0.420,0.870),
+ vec2(-0.060,0.980), vec2(-0.520,0.840), vec2(-0.900,0.420), vec2(-0.980,-0.020)
+);
+float luma(vec3 c){ return dot(c, vec3(0.2126,0.7152,0.0722)); }
 void main(){
  vec4 src=texture(u_image,v_uv);
  float mask=texture(u_mask,v_uv).a;
- if(mask<0.015){outColor=src;return;}
+ if(mask<0.012){ outColor=src; return; }
  float z=texture(u_depth,v_uv).r;
- float focusBand=mix(0.010,0.155,u_dof);
+ float focusBand=mix(0.010,0.145,u_dof);
  float delta=abs(z-u_focus);
- float coc=smoothstep(focusBand,focusBand+0.30,delta);
- if(z<u_focus) coc*=0.78;
+ float coc=smoothstep(focusBand,focusBand+0.26,delta);
+ if(z<u_focus) coc*=0.72;
  float radius=u_maxRadius*u_aperture*coc;
- if(radius<0.30){outColor=src;return;}
- vec3 sum=src.rgb;
- float total=1.0;
+ if(radius<0.18){ outColor=src; return; }
+ vec3 sum=src.rgb*1.16;
+ float total=1.16;
+ float srcLum=luma(src.rgb);
  for(int i=1;i<N;i++){
    vec2 suv=clamp(v_uv+OFF[i]*u_texel*radius,vec2(0.001),vec2(0.999));
    float sm=texture(u_mask,suv).a;
-   if(sm<0.08) continue;
+   if(sm<0.045) continue;
    float sz=texture(u_depth,suv).r;
-   float depthCompat=1.0-smoothstep(0.07,0.34,abs(sz-z));
-   float w=smoothstep(0.08,0.72,sm)*(0.32+0.68*depthCompat);
-   sum+=texture(u_image,suv).rgb*w;
+   vec3 sampleRgb=texture(u_image,suv).rgb;
+   float sampleLum=luma(sampleRgb);
+   float depthCompat=1.0-smoothstep(0.035,0.28,abs(sz-z));
+   float backgroundOnly=smoothstep(-0.015,0.055,sz-z);
+   float colorCompat=1.0-smoothstep(0.10,0.55,abs(sampleLum-srcLum));
+   float ring=0.70+0.30*smoothstep(0.12,1.0,length(OFF[i]));
+   float highlight=0.92+smoothstep(0.58,1.0,sampleLum)*0.10;
+   float w=smoothstep(0.06,0.78,sm) * (0.38+0.62*depthCompat) * (0.48+0.52*backgroundOnly) * (0.72+0.28*colorCompat) * ring * highlight;
+   sum+=sampleRgb*w;
    total+=w;
  }
- vec3 blurred=sum/max(total,0.001);
- float edge=smoothstep(0.035,0.92,mask);
- float mixAmt=coc*edge;
- outColor=vec4(mix(src.rgb,blurred,mixAmt),src.a);
+ vec3 blurred=sum/max(total,0.0001);
+ float edge=smoothstep(0.03,0.92,mask);
+ float mixAmt=coc*edge*(0.58+0.24*u_aperture);
+ vec3 finalRgb=mix(src.rgb,blurred,mixAmt);
+ outColor=vec4(finalRgb,src.a);
 }`;
     function compile(type,src){const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(s)||'shader compile failed');return s;}
     try{
@@ -1042,9 +1054,17 @@ void main(){
     gl.uniform1f(gl.getUniformLocation(program,'u_dof'),Math.max(0,Math.min(1,v.depth)));
     const aperture=0.12+apertureStrength(v.aperture)*1.18;
     gl.uniform1f(gl.getUniformLocation(program,'u_aperture'),aperture);
-    gl.uniform1f(gl.getUniformLocation(program,'u_maxRadius'),Math.max(1,v.blur));
-    gl.disable(gl.BLEND);gl.drawArrays(gl.TRIANGLES,0,6);
+    gl.uniform1f(gl.getUniformLocation(program,'u_maxRadius'),Math.max(0.8,v.blur));
+    gl.clearColor(0.0,0.0,0.0,0.0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.disable(gl.BLEND);
+    gl.drawArrays(gl.TRIANGLES,0,6);
+    gl.flush();
+    try{ gl.finish(); }catch(_err){}
     const out=offscreen(w,h), octx=out.getContext('2d');
+    octx.imageSmoothingEnabled=true;
+    if('imageSmoothingQuality' in octx) octx.imageSmoothingQuality='high';
+    octx.clearRect(0,0,w,h);
     octx.drawImage(glCanvas,0,0,w,h);
     return out;
   }
@@ -1835,11 +1855,96 @@ void main(){
 
   function sanitizeFileName(name){
     const cleaned=(name||'palette_studio')
-      .replace(/[\\/:*?\"<>|]+/g,'_')
+      .replace(/[\/:*?"<>|]+/g,'_')
       .replace(/^\.+|\.+$/g,'')
       .trim();
     return cleaned || 'palette_studio';
   }
+
+  function isIOSLike(){
+    const ua=navigator.userAgent||'';
+    const platform=navigator.platform||'';
+    return /iPad|iPhone|iPod/.test(ua)
+      || (/Mac/.test(platform) && navigator.maxTouchPoints>1)
+      || (/Mac OS X/.test(ua) && 'ontouchend' in document);
+  }
+
+  function dataURLToBlob(dataURL){
+    const parts=dataURL.split(',');
+    if(parts.length<2) throw new Error('dataURLの変換に失敗しました');
+    const mimeMatch=parts[0].match(/data:([^;]+)/);
+    const mime=mimeMatch?mimeMatch[1]:'image/png';
+    const binary=atob(parts[1]);
+    const len=binary.length;
+    const bytes=new Uint8Array(len);
+    for(let i=0;i<len;i++) bytes[i]=binary.charCodeAt(i);
+    return new Blob([bytes],{type:mime});
+  }
+
+  async function canvasToBlobSafe(sourceCanvas,mime,quality){
+    const targets=[];
+    if(sourceCanvas){
+      const clean=offscreen(sourceCanvas.width,sourceCanvas.height);
+      const cctx=clean.getContext('2d');
+      cctx.imageSmoothingEnabled=true;
+      if('imageSmoothingQuality' in cctx) cctx.imageSmoothingQuality='high';
+      cctx.clearRect(0,0,clean.width,clean.height);
+      cctx.drawImage(sourceCanvas,0,0);
+      targets.push(clean,sourceCanvas);
+    }
+    let lastError=null;
+    for(const canvas of targets){
+      try{
+        if(canvas.toBlob){
+          const blob=await new Promise((resolve,reject)=>{
+            try{
+              canvas.toBlob(b=>b?resolve(b):reject(new Error('toBlobがnullを返しました')),mime,quality);
+            }catch(err){ reject(err); }
+          });
+          if(blob && blob.size>0) return blob;
+        }
+      }catch(err){
+        lastError=err;
+      }
+      try{
+        const dataURL=canvas.toDataURL(mime,quality);
+        if(dataURL && dataURL.startsWith('data:')){
+          const blob=dataURLToBlob(dataURL);
+          if(blob && blob.size>0) return blob;
+        }
+      }catch(err){
+        lastError=err;
+      }
+    }
+    throw lastError || new Error('画像データの抽出に失敗しました');
+  }
+
+  async function triggerBlobDownload(blob,fileName){
+    if(navigator.msSaveOrOpenBlob){
+      navigator.msSaveOrOpenBlob(blob,fileName);
+      return 'download';
+    }
+    const file=new File([blob],fileName,{type:blob.type||'application/octet-stream'});
+    if(isIOSLike() && navigator.share && (!navigator.canShare || navigator.canShare({files:[file]}))){
+      await navigator.share({files:[file],title:'Palette Studio'});
+      return 'share';
+    }
+    const url=URL.createObjectURL(blob);
+    try{
+      const a=document.createElement('a');
+      a.href=url;
+      a.download=fileName;
+      a.rel='noopener';
+      if(!('download' in HTMLAnchorElement.prototype)) a.target='_blank';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      return ('download' in HTMLAnchorElement.prototype)?'download':'tab';
+    }finally{
+      setTimeout(()=>URL.revokeObjectURL(url),4000);
+    }
+  }
+
 
   function getExportSpec(){
     const requested=$('saveSize').value;
@@ -1864,16 +1969,23 @@ void main(){
     const esctx=exportSrc.getContext('2d');
     esctx.imageSmoothingEnabled=true;
     if('imageSmoothingQuality' in esctx) esctx.imageSmoothingQuality='high';
+    esctx.clearRect(0,0,spec.w,spec.h);
     esctx.drawImage(fullImg,0,0,fullW,fullH,0,0,spec.w,spec.h);
 
     let exportMask=null;
     if(autoBackgroundMask) exportMask=buildEffectiveBackgroundMask(spec.w,spec.h);
-    const out=composeProcessed(exportSrc,spec.w,spec.h,exportMask);
-    const octx=out.getContext('2d');
-    if($('copyrightOn').checked) drawCopyrightWatermark(octx,spec.w,spec.h);
+    const processed=composeProcessed(exportSrc,spec.w,spec.h,exportMask,false);
 
-    const blob=await new Promise(resolve=>out.toBlob(resolve,spec.mime,spec.quality));
-    if(!blob) throw new Error('画像の書き出しに失敗しました');
+    const exportCanvas=offscreen(spec.w,spec.h);
+    const xctx=exportCanvas.getContext('2d');
+    xctx.imageSmoothingEnabled=true;
+    if('imageSmoothingQuality' in xctx) xctx.imageSmoothingQuality='high';
+    xctx.clearRect(0,0,spec.w,spec.h);
+    xctx.drawImage(processed,0,0,spec.w,spec.h);
+    if($('copyrightOn').checked) drawCopyrightWatermark(xctx,spec.w,spec.h);
+
+    const blob=await canvasToBlobSafe(exportCanvas,spec.mime,spec.quality);
+    if(!blob || !blob.size) throw new Error('画像の書き出しに失敗しました');
     return {blob,spec};
   }
 
@@ -1946,19 +2058,21 @@ void main(){
       await ensureMaskReadyForSave();
       await new Promise(requestAnimationFrame);
       const {blob,spec}=await exportImage();
-      const url=URL.createObjectURL(blob);
-      const a=document.createElement('a');
-      a.href=url;
-      a.download=spec.fileName;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(()=>URL.revokeObjectURL(url),2500);
-      setSaveStatus(`${spec.fileName} を端末に保存しました。`);
-      showToast('端末に保存しました。','success');
+      const result=await triggerBlobDownload(blob,spec.fileName);
+      if(result==='share'){
+        setSaveStatus('iPhone / iPadでは共有メニューを開きました。「画像を保存」を選ぶと写真アプリに入れられます。');
+        showToast('共有メニューを開きました。','success');
+      }else if(result==='tab'){
+        setSaveStatus('新しいタブで画像を開きました。表示された画像を長押しまたは右クリックして保存してください。');
+        showToast('新しいタブで画像を開きました。','info');
+      }else{
+        setSaveStatus(`${spec.fileName} を端末に保存しました。`);
+        showToast('端末に保存しました。','success');
+      }
     }catch(err){
       console.error(err);
-      setSaveStatus('端末への保存に失敗しました。もう一度お試しください。');
+      const reason=err && err.message ? err.message : '不明なエラー';
+      setSaveStatus(`端末への保存に失敗しました。${reason}`);
       showToast('保存に失敗しました。','error');
     }finally{
       setSaveBusy(false);
