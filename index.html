@@ -192,7 +192,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
         <span class="group-chevron">⌃</span>
       </button>
       <div class="group-body" id="blurGroupBody">
-      <p class="mini">人物判定とAI深度マップを使って、背景だけに距離連動のレンズ風ボケをかけます。画像は端末内で処理し、初回だけ人物判定モデルと深度推定モデルの読み込みにネット接続が必要です。</p>
+      <p class="mini">人物判定とAI深度マップを使って、背景だけに距離連動の滑らかな光学ボケをかけます。保存の安定性を優先し、実際のぼかし処理は2D Canvasで行います。画像は端末内で処理し、初回だけ人物判定モデルと深度推定モデルの読み込みにネット接続が必要です。</p>
       <label class="check"><input type="checkbox" id="blurOn" checked> 背景ぼかしを使う</label>
       <div class="row"><span>絞り（F値）</span><input id="apertureF" type="range" min="1.4" max="16" step="0.1" value="2.8"><output id="apertureFOut">2.8</output></div>
       <p class="mini" style="margin-top:6px;">F値を小さくするとレンズの開放側になり、背景のボケが強くなります。</p>
@@ -810,21 +810,28 @@ button:disabled{opacity:.55;cursor:not-allowed}
 
 
   function buildSmoothGaussianBlur(source,w,h,radiusPx,interactive=false){
-    if(radiusPx<=0.2){const c=offscreen(w,h);c.getContext('2d').drawImage(source,0,0,w,h);return c;}
-    const base=interactive && radiusPx>4 ? buildScaleBlur(source,w,h,Math.max(0.8,radiusPx*0.85)) : source;
-    const out=offscreen(w,h);
-    const octx=out.getContext('2d');
-    octx.imageSmoothingEnabled=true;
-    if('imageSmoothingQuality' in octx) octx.imageSmoothingQuality='high';
-    octx.clearRect(0,0,w,h);
-    octx.filter=`blur(${Math.max(0.6,radiusPx)}px) saturate(1.03)`;
-    octx.drawImage(base,0,0,w,h);
-    octx.filter='none';
-    return out;
+    // iPhone/Safariでも安定するよう Canvas filter には依存せず、
+    // 既存の多段縮小・拡大ぼかしを使う。
+    const radius=Math.max(0,Number(radiusPx)||0);
+    if(radius<=0.25){
+      const c=offscreen(w,h);c.getContext('2d').drawImage(source,0,0,w,h);return c;
+    }
+    return buildScaleBlur(source,w,h,radius);
   }
 
   function getDepthValueFromData(data,index){
     return (data[index]+data[index+1]+data[index+2])/(255*3);
+  }
+
+  function makeSmallSource(source,w,h,maxSide){
+    const scale=Math.min(1,maxSide/Math.max(w,h));
+    const sw=Math.max(2,Math.round(w*scale));
+    const sh=Math.max(2,Math.round(h*scale));
+    const small=offscreen(sw,sh), sctx=small.getContext('2d');
+    sctx.imageSmoothingEnabled=true;
+    if('imageSmoothingQuality' in sctx) sctx.imageSmoothingQuality='high';
+    sctx.drawImage(source,0,0,w,h,0,0,sw,sh);
+    return {canvas:small,w:sw,h:sh,scale};
   }
 
   function applyDepthMapGaussianDefocus(source,depthCanvas,backgroundMask,w,h,v,interactive=false){
@@ -832,75 +839,79 @@ button:disabled{opacity:.55;cursor:not-allowed}
     const dof=clamp01(v.depth);
     const focus=clamp01(v.focus);
     const aperture=apertureStrength(v.aperture);
-    if((v.blur||0)<=0 || dof<=0.001) return null;
+    if((v.blur||0)<=0) return null;
 
-    const out=offscreen(w,h);
-    const octx=out.getContext('2d');
-    octx.imageSmoothingEnabled=true;
-    if('imageSmoothingQuality' in octx) octx.imageSmoothingQuality='high';
-    octx.clearRect(0,0,w,h);
-    octx.drawImage(source,0,0,w,h);
-
-    const maxSide=interactive?460:900;
-    const scale=Math.min(1,maxSide/Math.max(w,h));
-    const sw=Math.max(2,Math.round(w*scale));
-    const sh=Math.max(2,Math.round(h*scale));
+    // 書き出し時も背景のぼかし部分だけを低解像度で計算することで、
+    // 4K画像でもiPhoneのメモリを圧迫しにくくする。
+    const maxSide=interactive?620:Math.min(1680,Math.max(900,Math.round(Math.max(w,h)*0.48)));
+    const srcSmall=makeSmallSource(source,w,h,maxSide);
+    const sw=srcSmall.w, sh=srcSmall.h, scale=srcSmall.scale;
 
     const depthSmall=offscreen(sw,sh), dctx=depthSmall.getContext('2d');
     dctx.imageSmoothingEnabled=true;
+    if('imageSmoothingQuality' in dctx) dctx.imageSmoothingQuality='high';
     dctx.drawImage(depthCanvas,0,0,depthCanvas.width,depthCanvas.height,0,0,sw,sh);
     const depthData=dctx.getImageData(0,0,sw,sh).data;
 
     const maskSmall=offscreen(sw,sh), mctx=maskSmall.getContext('2d');
     mctx.imageSmoothingEnabled=true;
+    if('imageSmoothingQuality' in mctx) mctx.imageSmoothingQuality='high';
     mctx.drawImage(backgroundMask,0,0,w,h,0,0,sw,sh);
     const maskData=mctx.getImageData(0,0,sw,sh).data;
 
-    const thresholds=[[0.06,0.20],[0.16,0.34],[0.30,0.50],[0.46,0.70],[0.64,0.92]];
+    // 5段階の累積CoCマスク。遠くなるほど後段の強いぼかしが加わる。
+    const thresholds=[[0.03,0.16],[0.12,0.30],[0.26,0.48],[0.44,0.68],[0.64,0.90]];
     const masks=thresholds.map(()=>offscreen(sw,sh));
     const masksData=masks.map(c=>c.getContext('2d').createImageData(sw,sh));
 
-    const focusBand=0.012 + (1-dof)*0.11;
-    const transition=0.16 + dof*0.26;
+    // 被写界深度を上げるほどピント帯を広げる。
+    const focusBand=0.018 + dof*0.145;
+    const transition=0.17 + (1-dof)*0.10;
 
     for(let y=0;y<sh;y++){
       for(let x=0;x<sw;x++){
         const p=(y*sw+x)*4;
         const bgAlpha=maskData[p+3]/255;
-        if(bgAlpha<=0.003) continue;
+        if(bgAlpha<=0.002) continue;
         const z=getDepthValueFromData(depthData,p);
         let delta=Math.abs(z-focus);
-        if(z<focus) delta*=0.72;
-        let coc=smoothstep(focusBand, focusBand+transition, delta);
-        coc=Math.pow(coc,0.88);
-        coc*=Math.pow(bgAlpha,1.08);
+        // 手前側は後ボケより少し弱くして自然にする。
+        if(z<focus) delta*=0.74;
+        let coc=smoothstep(focusBand,focusBand+transition,delta);
+        coc=Math.pow(coc,0.78);
+        coc*=Math.pow(bgAlpha,1.06);
         for(let k=0;k<thresholds.length;k++){
           const [a,b]=thresholds[k];
-          const alpha=bgAlpha*smoothstep(a,b,coc);
-          const data=masksData[k].data;
-          data[p]=255; data[p+1]=255; data[p+2]=255; data[p+3]=Math.round(alpha*255);
+          const aOut=bgAlpha*smoothstep(a,b,coc);
+          const d=masksData[k].data;
+          d[p]=255;d[p+1]=255;d[p+2]=255;d[p+3]=Math.round(aOut*255);
         }
       }
     }
     for(let k=0;k<masks.length;k++) masks[k].getContext('2d').putImageData(masksData[k],0,0);
 
-    const baseRadius=Math.max(1.2, v.blur*(0.34+aperture*0.92)*(0.55+dof*0.72));
-    const radii=[0.34,0.56,0.82,1.12,1.48].map(f=>Math.max(0.8,baseRadius*f));
-    const layerOpacities=[0.44,0.58,0.72,0.86,0.98];
+    const out=offscreen(w,h), octx=out.getContext('2d');
+    octx.imageSmoothingEnabled=true;
+    if('imageSmoothingQuality' in octx) octx.imageSmoothingQuality='high';
+    octx.drawImage(source,0,0,w,h);
 
-    for(let k=0;k<radii.length;k++){
-      const blurred=buildSmoothGaussianBlur(source,w,h,radii[k],interactive);
-      const layer=offscreen(w,h);
-      const lctx=layer.getContext('2d');
+    // スライダー18 / F2.8でも明確に分かる強さに設定。
+    const baseRadiusFull=Math.max(1.4,v.blur*(0.48+aperture*1.25));
+    const radiiFull=[0.30,0.52,0.78,1.06,1.38].map(f=>Math.max(0.9,baseRadiusFull*f));
+    const layerOpacity=[0.48,0.62,0.76,0.88,0.98];
+
+    for(let k=0;k<radiiFull.length;k++){
+      const radiusSmall=Math.max(0.7,radiiFull[k]*scale);
+      const blurredSmall=buildScaleBlur(srcSmall.canvas,sw,sh,radiusSmall);
+      const layerSmall=offscreen(sw,sh), lctx=layerSmall.getContext('2d');
       lctx.imageSmoothingEnabled=true;
       if('imageSmoothingQuality' in lctx) lctx.imageSmoothingQuality='high';
-      lctx.clearRect(0,0,w,h);
-      lctx.drawImage(blurred,0,0,w,h);
+      lctx.drawImage(blurredSmall,0,0,sw,sh);
       lctx.globalCompositeOperation='destination-in';
-      lctx.drawImage(masks[k],0,0,sw,sh,0,0,w,h);
+      lctx.drawImage(masks[k],0,0,sw,sh);
       lctx.globalCompositeOperation='source-over';
-      octx.globalAlpha=layerOpacities[k];
-      octx.drawImage(layer,0,0,w,h);
+      octx.globalAlpha=layerOpacity[k];
+      octx.drawImage(layerSmall,0,0,sw,sh,0,0,w,h);
       octx.globalAlpha=1;
     }
     return out;
@@ -1197,169 +1208,88 @@ void main(){
   }
 
   function drawBokehElement(ctx,shape,c,radius,alpha,fringePx){
-    const preserve=0.94;
-    const cr=Math.round(c.r*preserve + Math.min(255,c.r+8)*(1-preserve));
-    const cg=Math.round(c.g*preserve + Math.min(255,c.g+8)*(1-preserve));
-    const cb=Math.round(c.b*preserve + Math.min(255,c.b+8)*(1-preserve));
-
+    const cr=c.r|0,cg=c.g|0,cb=c.b|0;
     ctx.save();
     ctx.translate(c.x,c.y);
-    if(shape==='hexagon') ctx.rotate((c.x*0.013 + c.y*0.009)%Math.PI);
-    else if(shape==='star') ctx.rotate((c.x*0.017 + c.y*0.011)%Math.PI);
+    if(shape==='hexagon') ctx.rotate((c.x*0.013+c.y*0.009)%Math.PI);
+    else if(shape==='star') ctx.rotate((c.x*0.017+c.y*0.011)%Math.PI);
 
     ctx.beginPath();
     drawShapePath(ctx,shape,radius);
     const grad=ctx.createRadialGradient(0,0,0,0,0,radius);
-    if(shape==='circle'){
-      grad.addColorStop(0,`rgba(${cr},${cg},${cb},${Math.min(0.55,alpha*0.72)})`);
-      grad.addColorStop(0.38,`rgba(${cr},${cg},${cb},${alpha*0.42})`);
-      grad.addColorStop(0.74,`rgba(${cr},${cg},${cb},${alpha*0.17})`);
-      grad.addColorStop(1,`rgba(${cr},${cg},${cb},0)`);
-    }else{
-      grad.addColorStop(0,`rgba(${cr},${cg},${cb},${Math.min(0.70,alpha*0.84)})`);
-      grad.addColorStop(0.44,`rgba(${cr},${cg},${cb},${alpha*0.46})`);
-      grad.addColorStop(0.82,`rgba(${cr},${cg},${cb},${alpha*0.13})`);
-      grad.addColorStop(1,`rgba(${cr},${cg},${cb},0)`);
-    }
+    grad.addColorStop(0,`rgba(${cr},${cg},${cb},${alpha*0.72})`);
+    grad.addColorStop(.42,`rgba(${cr},${cg},${cb},${alpha*0.43})`);
+    grad.addColorStop(.78,`rgba(${cr},${cg},${cb},${alpha*0.14})`);
+    grad.addColorStop(1,`rgba(${cr},${cg},${cb},0)`);
     ctx.fillStyle=grad;
     ctx.fill();
 
-    // Keep the source color harmony; only add a very subtle core so highlights do not pop unnaturally.
-    const coreAlpha=(shape==='circle' ? alpha*0.14 : alpha*0.22);
-    if(coreAlpha>0.01){
-      ctx.beginPath();
-      drawShapePath(ctx,shape,radius*(shape==='circle' ? 0.24 : 0.30));
-      const core=ctx.createRadialGradient(0,0,0,0,0,radius*(shape==='circle' ? 0.24 : 0.30));
-      core.addColorStop(0,`rgba(${Math.min(255,cr+10)},${Math.min(255,cg+10)},${Math.min(255,cb+10)},${coreAlpha})`);
-      core.addColorStop(1,'rgba(255,255,255,0)');
-      ctx.fillStyle=core;
-      ctx.fill();
-    }
-
-    // Subtle chromatic edge tint to mimic lens aberration without floating colors.
-    if(fringePx>0.04){
-      const lineW=Math.max(0.38, radius*0.045 + fringePx*0.40);
-      const edgeAlpha=Math.min(0.12, alpha*0.09 + fringePx*0.012);
-      const offsets=[
-        {dx: fringePx*0.55, dy:-fringePx*0.20, color:`rgba(${Math.min(255,cr+28)},${Math.max(0,cg-6)},${Math.max(0,cb-10)},${edgeAlpha})`},
-        {dx:-fringePx*0.52, dy: fringePx*0.22, color:`rgba(${Math.max(0,cr-10)},${Math.max(0,cg-4)},${Math.min(255,cb+30)},${edgeAlpha*0.92})`}
-      ];
+    if(fringePx>.05){
+      const edgeAlpha=Math.min(.08,alpha*.10);
       ctx.globalCompositeOperation='screen';
-      for(const o of offsets){
-        ctx.save();
-        ctx.translate(o.dx,o.dy);
-        ctx.beginPath();
-        drawShapePath(ctx,shape,Math.max(0.8, radius - lineW*0.12));
-        ctx.strokeStyle=o.color;
-        ctx.lineWidth=lineW;
-        ctx.stroke();
-        ctx.restore();
-      }
+      ctx.lineWidth=Math.max(.35,radius*.035);
+      ctx.save();ctx.translate(fringePx*.45,-fringePx*.15);ctx.beginPath();drawShapePath(ctx,shape,radius*.96);ctx.strokeStyle=`rgba(${Math.min(255,cr+24)},${cg},${Math.max(0,cb-10)},${edgeAlpha})`;ctx.stroke();ctx.restore();
+      ctx.save();ctx.translate(-fringePx*.45,fringePx*.15);ctx.beginPath();drawShapePath(ctx,shape,radius*.96);ctx.strokeStyle=`rgba(${Math.max(0,cr-10)},${cg},${Math.min(255,cb+24)},${edgeAlpha})`;ctx.stroke();ctx.restore();
       ctx.globalCompositeOperation='source-over';
     }
     ctx.restore();
   }
 
   function applyBokehShapes(base,source,depthCanvas,backgroundMask,w,h,v,interactive=false){
-    if(!base || !source || !depthCanvas || !backgroundMask) return base;
-    if(v.bokehShape==='off' || v.bokehSize<=0 || v.bokehIntensity<=0.001) return base;
+    if(!base||!source||!depthCanvas||!backgroundMask) return base;
+    if(v.bokehShape==='off'||v.bokehSize<=0||v.bokehIntensity<=0.001) return base;
 
-    const sctx=source.getContext('2d',{willReadFrequently:true});
-    const dctx=depthCanvas.getContext('2d',{willReadFrequently:true});
-    const mctx=backgroundMask.getContext('2d',{willReadFrequently:true});
-    const srcData=sctx.getImageData(0,0,w,h).data;
-    const depthData=dctx.getImageData(0,0,w,h).data;
-    const maskData=mctx.getImageData(0,0,w,h).data;
+    const maxSide=interactive?520:760;
+    const srcSmall=makeSmallSource(source,w,h,maxSide);
+    const sw=srcSmall.w,sh=srcSmall.h,scale=srcSmall.scale;
 
-    const density=Math.max(0,Math.min(1,v.bokehDensity));
-    const fringe=Math.max(0,Math.min(1,v.bokehFringe));
-    const threshold=Math.max(0.44, 0.68 - v.bokehIntensity*0.15 - density*0.08);
-    const focusBand=0.010 + (0.155-0.010)*Math.max(0,Math.min(1,v.depth));
-    const aperture=0.10 + apertureStrength(v.aperture)*0.95;
-    const stepBase=6.5 - density*4.2;
-    const step=Math.max(1, Math.round(interactive ? Math.max(2,stepBase+1.0) : stepBase));
-    const radiusBase=Math.max(1.4, 0.9 + (v.bokehSize*0.07) + (v.blur*0.10) + aperture*1.05);
-    const maxCandidates=interactive
-      ? Math.min(420, Math.max(140, Math.round((w*h)/(step*step*140))))
-      : Math.min(4200, Math.max(500, Math.round((w*h)/(step*step*10))));
+    const depthSmall=offscreen(sw,sh),dctx=depthSmall.getContext('2d');
+    dctx.drawImage(depthCanvas,0,0,depthCanvas.width,depthCanvas.height,0,0,sw,sh);
+    const depthData=dctx.getImageData(0,0,sw,sh).data;
+    const maskSmall=offscreen(sw,sh),mctx=maskSmall.getContext('2d');
+    mctx.drawImage(backgroundMask,0,0,w,h,0,0,sw,sh);
+    const maskData=mctx.getImageData(0,0,sw,sh).data;
+    const srcData=srcSmall.canvas.getContext('2d').getImageData(0,0,sw,sh).data;
+
+    const density=clamp01(v.bokehDensity),fringe=clamp01(v.bokehFringe);
+    const step=Math.max(2,Math.round(6-density*3.5));
+    const threshold=Math.max(.58,.76-v.bokehIntensity*.16-density*.05);
+    const focusBand=.018+v.depth*.145;
+    const aperture=apertureStrength(v.aperture);
+    const radiusBase=Math.max(1.5,(1.1+v.bokehSize*.045+v.blur*.055+aperture*.8)*scale);
     const candidates=[];
 
-    for(let y=2; y<h-2; y+=step){
-      for(let x=2; x<w-2; x+=step){
-        const idx=(y*w+x)*4;
-        const maskA=maskData[idx+3]/255;
-        if(maskA<0.12) continue;
-        const z=depthData[idx]/255;
-        const delta=z-v.focus;
-        if(delta<=focusBand*0.15) continue;
-        const coc=smoothstep(focusBand, focusBand+0.28, Math.abs(z-v.focus));
-        if(coc<0.10) continue;
-        const lum=getPixelLuma(srcData,idx);
-        if(lum<threshold) continue;
-
-        const left=getPixelLuma(srcData,idx-4), right=getPixelLuma(srcData,idx+4), up=getPixelLuma(srcData,idx-w*4), down=getPixelLuma(srcData,idx+w*4);
-        const localAvg=(left+right+up+down)*0.25;
-        const prominence=lum-localAvg;
-        if(prominence<0.003 && lum<0.78) continue;
-
-        const farFactor=smoothstep(v.focus+focusBand*0.28,1.0,z);
-        const strength=((lum-threshold)/Math.max(0.0001,1-threshold)) * (0.34+0.66*coc) * (0.20+0.80*farFactor) * (0.36+0.64*maskA);
-        if(strength<=0.010) continue;
-
-        candidates.push({
-          x,y,z,coc,lum,
-          r:srcData[idx],g:srcData[idx+1],b:srcData[idx+2],
-          score:strength + Math.max(0,prominence)*0.22
-        });
+    for(let y=2;y<sh-2;y+=step){
+      for(let x=2;x<sw-2;x+=step){
+        const p=(y*sw+x)*4;
+        const ma=maskData[p+3]/255;if(ma<.14)continue;
+        const z=getDepthValueFromData(depthData,p);
+        if(z<=v.focus+focusBand*.08)continue;
+        const coc=smoothstep(focusBand,focusBand+.22,Math.abs(z-v.focus));if(coc<.18)continue;
+        const lum=getPixelLuma(srcData,p);if(lum<threshold)continue;
+        const score=(lum-threshold)/Math.max(.001,1-threshold)*(.35+.65*coc)*ma;
+        if(score<.02)continue;
+        candidates.push({x,y,coc,score,r:srcData[p],g:srcData[p+1],b:srcData[p+2]});
       }
     }
-
-    if(!candidates.length) return base;
+    if(!candidates.length)return base;
     candidates.sort((a,b)=>b.score-a.score);
-    const selected=candidates.slice(0,maxCandidates);
-
-    const overlay=offscreen(w,h);
-    const octx=overlay.getContext('2d');
-    octx.imageSmoothingEnabled=true;
-    if('imageSmoothingQuality' in octx) octx.imageSmoothingQuality='high';
-    octx.globalCompositeOperation='source-over';
-
-    const fringePxBase=fringe * (0.15 + radiusBase*0.05 + v.bokehSize*0.008);
-
+    const selected=candidates.slice(0,interactive?120:420);
+    const overlay=offscreen(sw,sh),octx=overlay.getContext('2d');
+    const fringeBase=fringe*(.25+radiusBase*.06);
     for(const c of selected){
-      const radius=radiusBase*(0.82 + c.coc*0.56) * (0.94 + c.score*0.16);
-      const alphaBase=(shape => shape==='circle' ? 0.18 : 0.28)(v.bokehShape);
-      const alpha=Math.min(0.34, (0.03 + v.bokehIntensity*alphaBase) * (0.34 + c.score*0.62));
-      const fringePx=fringePxBase * (0.45 + c.coc*0.55);
-      drawBokehElement(octx,v.bokehShape,c,radius,alpha,fringePx);
+      const radius=radiusBase*(.80+c.coc*.55)*(1+c.score*.20);
+      const alpha=Math.min(.30,(.025+v.bokehIntensity*.20)*(.34+c.score*.58));
+      drawBokehElement(octx,v.bokehShape,c,radius,alpha,fringeBase*(.5+c.coc*.5));
     }
+    octx.globalCompositeOperation='destination-in';octx.drawImage(maskSmall,0,0);octx.globalCompositeOperation='source-over';
 
-    const softened=offscreen(w,h);
-    const sfctx=softened.getContext('2d');
-    const blurPx=Math.max(0.22, radiusBase*(0.035 + fringe*0.018));
-    if('filter' in sfctx) sfctx.filter=`blur(${blurPx.toFixed(2)}px)`;
-    sfctx.globalCompositeOperation='source-over';
-    sfctx.drawImage(overlay,0,0);
-    if('filter' in sfctx) sfctx.filter='none';
-    sfctx.globalCompositeOperation='destination-in';
-    sfctx.drawImage(backgroundMask,0,0,w,h);
-    sfctx.globalCompositeOperation='source-over';
-
-    const out=offscreen(w,h);
-    const outCtx=out.getContext('2d');
-    outCtx.drawImage(base,0,0);
-
-    // Blend in gently to keep the original background hue/saturation intact.
-    outCtx.globalCompositeOperation='soft-light';
-    outCtx.globalAlpha=Math.min(0.58, 0.10 + v.bokehIntensity*0.30);
-    outCtx.drawImage(softened,0,0);
-
-    outCtx.globalCompositeOperation='source-over';
-    outCtx.globalAlpha=Math.min(0.26, 0.04 + v.bokehIntensity*0.16);
-    outCtx.drawImage(softened,0,0);
-
-    outCtx.globalAlpha=1;
-    outCtx.globalCompositeOperation='source-over';
+    const out=offscreen(w,h),ctx2=out.getContext('2d');
+    ctx2.drawImage(base,0,0);
+    ctx2.globalCompositeOperation='soft-light';
+    ctx2.globalAlpha=Math.min(.38,.08+v.bokehIntensity*.22);
+    ctx2.drawImage(overlay,0,0,sw,sh,0,0,w,h);
+    ctx2.globalAlpha=1;ctx2.globalCompositeOperation='source-over';
     return out;
   }
 
@@ -1582,60 +1512,30 @@ void main(){
       if(aiDepthCanvas){
         const depthOut=applyDepthMapGaussianDefocus(filtered,aiDepthCanvas,mask,w,h,v,interactive);
         if(depthOut) out=depthOut;
-      }
-
-      if(out===filtered){
-        const merged=offscreen(w,h);
-        const mctx=merged.getContext('2d');
-        mctx.imageSmoothingEnabled=true;
-        if('imageSmoothingQuality' in mctx) mctx.imageSmoothingQuality='high';
-        mctx.clearRect(0,0,w,h);
+      }else{
+        const merged=offscreen(w,h),mctx=merged.getContext('2d');
         mctx.drawImage(filtered,0,0);
         const aperture=apertureStrength(v.aperture);
-        const maxRadius=Math.max(1.0,v.blur*(0.30+aperture*0.90)*(0.55+v.depth*0.75));
-        if(v.depth<=0.001){
-          const blurred=buildSmoothGaussianBlur(filtered,w,h,maxRadius,interactive);
-          const blurLayer=offscreen(w,h), bctx=blurLayer.getContext('2d');
-          bctx.drawImage(blurred,0,0);
-          bctx.globalCompositeOperation='destination-in';
-          bctx.drawImage(mask,0,0,w,h);
-          bctx.globalCompositeOperation='source-over';
-          mctx.drawImage(blurLayer,0,0);
-        }else{
-          const depthInfo=buildProgressiveDepthLayers(mask,w,h,v.depth);
-          if(depthInfo){
-            const radii=[0.30,0.52,0.80,1.15].map(f=>Math.max(0.8,maxRadius*f));
-            const opacities=[0.50,0.66,0.82,0.96];
-            for(let k=0;k<4;k++){
-              const blurred=buildSmoothGaussianBlur(filtered,w,h,radii[k],interactive);
-              const layer=offscreen(w,h), lctx=layer.getContext('2d');
-              lctx.drawImage(blurred,0,0);
-              lctx.globalCompositeOperation='destination-in';
-              lctx.imageSmoothingEnabled=true;
-              if('imageSmoothingQuality' in lctx) lctx.imageSmoothingQuality='high';
-              lctx.drawImage(depthInfo.layers[k],0,0,depthInfo.sw,depthInfo.sh,0,0,w,h);
-              lctx.globalCompositeOperation='source-over';
-              mctx.globalAlpha=opacities[k];
-              mctx.drawImage(layer,0,0);
-              mctx.globalAlpha=1;
-            }
-          }
-        }
+        const radius=Math.max(1.2,v.blur*(.45+aperture*1.15));
+        const srcSmall=makeSmallSource(filtered,w,h,interactive?620:1400);
+        const blurred=buildScaleBlur(srcSmall.canvas,srcSmall.w,srcSmall.h,Math.max(.7,radius*srcSmall.scale));
+        const layer=offscreen(srcSmall.w,srcSmall.h),lctx=layer.getContext('2d');
+        lctx.drawImage(blurred,0,0);
+        lctx.globalCompositeOperation='destination-in';
+        lctx.drawImage(mask,0,0,w,h,0,0,srcSmall.w,srcSmall.h);
+        lctx.globalCompositeOperation='source-over';
+        mctx.drawImage(layer,0,0,srcSmall.w,srcSmall.h,0,0,w,h);
         out=merged;
       }
-
-      if(aiDepthCanvas && out){
-        out=applyBokehShapes(out,filtered,aiDepthCanvas,mask,w,h,v,interactive);
-      }
+      if(aiDepthCanvas) out=applyBokehShapes(out,filtered,aiDepthCanvas,mask,w,h,v,interactive);
     }
 
-    if(!interactive && v.subjectPop>0 && mask){
-      out=applySubjectPop(out,w,h,mask,v.subjectPop);
-    }
+    if(!interactive&&v.subjectPop>0&&mask) out=applySubjectPop(out,w,h,mask,v.subjectPop);
     return out;
   }
 
   function render(mode='full'){
+
 
     if(!srcCanvas) return;
     const usePreview=mode==='preview';
@@ -1967,159 +1867,60 @@ void main(){
     return cleaned || 'palette_studio';
   }
 
-  function isIOSLike(){
-    const ua=navigator.userAgent||'';
-    const platform=navigator.platform||'';
-    return /iPad|iPhone|iPod/.test(ua)
-      || (/Mac/.test(platform) && navigator.maxTouchPoints>1)
-      || (/Mac OS X/.test(ua) && 'ontouchend' in document);
-  }
-
   function dataURLToBlob(dataURL){
     const parts=dataURL.split(',');
-    if(parts.length<2) throw new Error('dataURLの変換に失敗しました');
     const mimeMatch=parts[0].match(/data:([^;]+)/);
     const mime=mimeMatch?mimeMatch[1]:'image/png';
     const binary=atob(parts[1]);
-    const len=binary.length;
-    const bytes=new Uint8Array(len);
-    for(let i=0;i<len;i++) bytes[i]=binary.charCodeAt(i);
+    const bytes=new Uint8Array(binary.length);
+    for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
     return new Blob([bytes],{type:mime});
   }
 
-  async function canvasToBlobSafe(sourceCanvas,mime,quality){
-    const targets=[];
-    if(sourceCanvas){
-      const clean=offscreen(sourceCanvas.width,sourceCanvas.height);
-      const cctx=clean.getContext('2d');
-      cctx.imageSmoothingEnabled=true;
-      if('imageSmoothingQuality' in cctx) cctx.imageSmoothingQuality='high';
-      cctx.clearRect(0,0,clean.width,clean.height);
-      cctx.drawImage(sourceCanvas,0,0);
-      targets.push(clean,sourceCanvas);
-    }
-    let lastError=null;
-    for(const canvas of targets){
-      try{
-        if(canvas.toBlob){
-          const blob=await new Promise((resolve,reject)=>{
-            try{
-              canvas.toBlob(b=>b?resolve(b):reject(new Error('toBlobがnullを返しました')),mime,quality);
-            }catch(err){ reject(err); }
-          });
-          if(blob && blob.size>0) return blob;
-        }
-      }catch(err){
-        lastError=err;
-      }
-      try{
-        const dataURL=canvas.toDataURL(mime,quality);
-        if(dataURL && dataURL.startsWith('data:')){
-          const blob=dataURLToBlob(dataURL);
-          if(blob && blob.size>0) return blob;
-        }
-      }catch(err){
-        lastError=err;
-      }
-    }
-    throw lastError || new Error('画像データの抽出に失敗しました');
-  }
-
-  async function triggerBlobDownload(blob,fileName){
-    if(navigator.msSaveOrOpenBlob){
-      navigator.msSaveOrOpenBlob(blob,fileName);
-      return 'download';
-    }
-    const file=new File([blob],fileName,{type:blob.type||'application/octet-stream'});
-    if(isIOSLike() && navigator.share && (!navigator.canShare || navigator.canShare({files:[file]}))){
-      await navigator.share({files:[file],title:'Palette Studio'});
-      return 'share';
-    }
-    const url=URL.createObjectURL(blob);
+  async function canvasToBlobStable(c,mime,quality){
     try{
-      const a=document.createElement('a');
-      a.href=url;
-      a.download=fileName;
-      a.rel='noopener';
-      if(!('download' in HTMLAnchorElement.prototype)) a.target='_blank';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      return ('download' in HTMLAnchorElement.prototype)?'download':'tab';
-    }finally{
-      setTimeout(()=>URL.revokeObjectURL(url),4000);
-    }
+      const blob=await new Promise((resolve,reject)=>{
+        try{c.toBlob(b=>b?resolve(b):reject(new Error('toBlobがnullを返しました')),mime,quality);}catch(err){reject(err);}
+      });
+      if(blob&&blob.size)return blob;
+    }catch(err){console.warn('toBlob fallback',err);}
+    const dataURL=c.toDataURL(mime,quality);
+    const blob=dataURLToBlob(dataURL);
+    if(!blob||!blob.size)throw new Error('画像データを作成できませんでした');
+    return blob;
   }
-
-
-  function openPendingSaveWindow(){
-    try{
-      const win=window.open('about:blank','_blank');
-      if(win){
-        win.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Palette Studio</title><style>body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;background:#0b1020;color:#eef4ff;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:24px;text-align:center}p{line-height:1.8}</style></head><body><p>画像を準備しています…<br>このまま少しお待ちください。</p></body></html>');
-        win.document.close();
-      }
-      return win;
-    }catch(_err){
-      return null;
-    }
-  }
-
-  function showImageInWindow(win,blob){
-    const url=URL.createObjectURL(blob);
-    if(win && !win.closed){
-      win.document.open();
-      win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Palette Studio</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;background:#08101d;color:#eef4ff;margin:0;padding:18px;text-align:center}img{max-width:100%;height:auto;border-radius:12px;box-shadow:0 18px 48px rgba(0,0,0,.32)}p{line-height:1.8;margin:0 0 14px}.wrap{max-width:980px;margin:0 auto}</style></head><body><div class="wrap"><p>画像を開きました。<br>iPhone / iPadでは画像を長押しして「写真に保存」を選んでください。</p><img alt="saved image" src="${url}"></div></body></html>`);
-      win.document.close();
-    }else{
-      window.open(url,'_blank');
-    }
-    setTimeout(()=>URL.revokeObjectURL(url),60000);
-  }
-
 
   function getExportSpec(){
     const requested=$('saveSize').value;
-    let w=fullW, h=fullH;
+    let w=fullW,h=fullH;
     if(requested!=='original'){
       const maxSide=+requested;
       const scale=Math.min(1,maxSide/Math.max(fullW,fullH));
-      w=Math.max(1,Math.round(fullW*scale));
-      h=Math.max(1,Math.round(fullH*scale));
+      w=Math.max(1,Math.round(fullW*scale));h=Math.max(1,Math.round(fullH*scale));
     }
     const format=$('saveFormat').value;
     const mime=format==='jpeg'?'image/jpeg':'image/png';
     const ext=format==='jpeg'?'jpg':'png';
     const quality=format==='jpeg'?(+$('jpegQuality').value/100):undefined;
     const fileName=`${sanitizeFileName($('saveFileName').value)}.${ext}`;
-    return {w,h,format,mime,ext,quality,fileName};
+    return{w,h,format,mime,ext,quality,fileName};
   }
 
   async function exportImage(){
     const spec=getExportSpec();
-    const exportCanvas=document.createElement('canvas');
-    exportCanvas.width=spec.w;
-    exportCanvas.height=spec.h;
-    const xctx=exportCanvas.getContext('2d',{alpha:false});
-    xctx.imageSmoothingEnabled=true;
-    if('imageSmoothingQuality' in xctx) xctx.imageSmoothingQuality='high';
-    xctx.clearRect(0,0,spec.w,spec.h);
-
-    const exportSrc=offscreen(spec.w,spec.h);
-    const esctx=exportSrc.getContext('2d');
-    esctx.imageSmoothingEnabled=true;
-    if('imageSmoothingQuality' in esctx) esctx.imageSmoothingQuality='high';
-    esctx.clearRect(0,0,spec.w,spec.h);
+    const exportSrc=offscreen(spec.w,spec.h),esctx=exportSrc.getContext('2d');
+    esctx.imageSmoothingEnabled=true;if('imageSmoothingQuality'in esctx)esctx.imageSmoothingQuality='high';
     esctx.drawImage(fullImg,0,0,fullW,fullH,0,0,spec.w,spec.h);
 
     const exportMask=getProcessingBackgroundMask(spec.w,spec.h);
-    const rendered=showAfter ? composeProcessed(exportSrc,spec.w,spec.h,exportMask,false) : exportSrc;
-    xctx.drawImage(rendered,0,0,spec.w,spec.h);
-    if($('copyrightOn').checked) drawCopyrightWatermark(xctx,spec.w,spec.h);
+    const out=showAfter?composeProcessed(exportSrc,spec.w,spec.h,exportMask,false):exportSrc;
+    const finalCanvas=offscreen(spec.w,spec.h),fctx=finalCanvas.getContext('2d');
+    fctx.imageSmoothingEnabled=true;if('imageSmoothingQuality'in fctx)fctx.imageSmoothingQuality='high';
+    fctx.drawImage(out,0,0,spec.w,spec.h);
+    if($('copyrightOn').checked)drawCopyrightWatermark(fctx,spec.w,spec.h);
 
-    const blob=await canvasToBlobSafe(exportCanvas,spec.mime,spec.quality);
-    if(!blob || !blob.size) throw new Error('画像の書き出しに失敗しました');
-    return {blob,spec,canvas:exportCanvas};
+    const blob=await canvasToBlobStable(finalCanvas,spec.mime,spec.quality);
+    return{blob,spec};
   }
 
   function setSaveBusy(busy,label='保存データを作成中…'){
@@ -2184,51 +1985,27 @@ void main(){
   }
 
   async function saveByDownload(){
-    if(!fullImg) return;
-    const iosWindow=isIOSLike()?openPendingSaveWindow():null;
-    setSaveBusy(true);
-    setSaveStatus('保存用データを作成しています…');
+    if(!fullImg)return;
+    setSaveBusy(true);setSaveStatus('保存用データを作成しています…');
     try{
       await ensureMaskReadyForSave();
       await new Promise(requestAnimationFrame);
-      const {blob,spec}=await exportImage();
-      if(isIOSLike()){
-        if(iosWindow){
-          showImageInWindow(iosWindow,blob);
-          setSaveStatus('画像を新しいタブで開きました。iPhone / iPadでは画像を長押しして「写真に保存」を選んでください。');
-          showToast('保存用の画像を開きました。','success');
-        }else{
-          const result=await triggerBlobDownload(blob,spec.fileName);
-          if(result==='share'){
-            setSaveStatus('共有メニューを開きました。「画像を保存」を選ぶと写真アプリへ保存できます。');
-            showToast('共有メニューを開きました。','success');
-          }else{
-            setSaveStatus('画像を開きました。表示された画像を長押しして保存してください。');
-            showToast('画像を開きました。','info');
-          }
-        }
-      }else{
-        const result=await triggerBlobDownload(blob,spec.fileName);
-        if(result==='tab'){
-          setSaveStatus('新しいタブで画像を開きました。表示された画像を右クリックして保存してください。');
-          showToast('新しいタブで画像を開きました。','info');
-        }else{
-          setSaveStatus(`${spec.fileName} を端末に保存しました。`);
-          showToast('端末に保存しました。','success');
-        }
-      }
+      const{blob,spec}=await exportImage();
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');
+      a.href=url;a.download=spec.fileName;a.style.display='none';
+      document.body.appendChild(a);a.click();a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),5000);
+      setSaveStatus(`${spec.fileName} を端末に保存しました。`);showToast('端末に保存しました。','success');
     }catch(err){
       console.error(err);
-      if(iosWindow && !iosWindow.closed) iosWindow.close();
-      const reason=err && err.message ? err.message : '不明なエラー';
-      setSaveStatus(`端末への保存に失敗しました。${reason}`);
+      setSaveStatus('端末への保存に失敗しました: '+(err?.message||String(err)));
       showToast('保存に失敗しました。','error');
-    }finally{
-      setSaveBusy(false);
-    }
+    }finally{setSaveBusy(false);}
   }
 
   async function saveByShare(){
+
     if(!fullImg) return;
     setSaveBusy(true,'共有用データを作成中…');
     setSaveStatus('共有メニュー用の画像を準備しています…');
