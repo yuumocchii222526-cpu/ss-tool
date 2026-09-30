@@ -606,7 +606,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
     return await new Promise((resolve,reject)=>{
       const reader=new FileReader();
       reader.onerror=()=>reject(new Error('FileReaderで読み込めませんでした'));
-      reader.onload=()=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=()=>reject(new Error('画像デコードに失敗しました'));img.src=reader.result;};
+      reader.onload=()=>{const img=new Image();img.crossOrigin='anonymous';img.onload=()=>resolve(img);img.onerror=()=>reject(new Error('画像デコードに失敗しました'));img.src=reader.result;};
       reader.readAsDataURL(file);
     });
   }
@@ -808,6 +808,104 @@ button:disabled{opacity:.55;cursor:not-allowed}
     const out=offscreen(w,h), octx=out.getContext('2d');octx.imageSmoothingEnabled=true;if('imageSmoothingQuality' in octx)octx.imageSmoothingQuality='high';octx.drawImage(cur,0,0,cw,ch,0,0,w,h);return out;
   }
 
+
+  function buildSmoothGaussianBlur(source,w,h,radiusPx,interactive=false){
+    if(radiusPx<=0.2){const c=offscreen(w,h);c.getContext('2d').drawImage(source,0,0,w,h);return c;}
+    const base=interactive && radiusPx>4 ? buildScaleBlur(source,w,h,Math.max(0.8,radiusPx*0.85)) : source;
+    const out=offscreen(w,h);
+    const octx=out.getContext('2d');
+    octx.imageSmoothingEnabled=true;
+    if('imageSmoothingQuality' in octx) octx.imageSmoothingQuality='high';
+    octx.clearRect(0,0,w,h);
+    octx.filter=`blur(${Math.max(0.6,radiusPx)}px) saturate(1.03)`;
+    octx.drawImage(base,0,0,w,h);
+    octx.filter='none';
+    return out;
+  }
+
+  function getDepthValueFromData(data,index){
+    return (data[index]+data[index+1]+data[index+2])/(255*3);
+  }
+
+  function applyDepthMapGaussianDefocus(source,depthCanvas,backgroundMask,w,h,v,interactive=false){
+    if(!source||!depthCanvas||!backgroundMask) return null;
+    const dof=clamp01(v.depth);
+    const focus=clamp01(v.focus);
+    const aperture=apertureStrength(v.aperture);
+    if((v.blur||0)<=0 || dof<=0.001) return null;
+
+    const out=offscreen(w,h);
+    const octx=out.getContext('2d');
+    octx.imageSmoothingEnabled=true;
+    if('imageSmoothingQuality' in octx) octx.imageSmoothingQuality='high';
+    octx.clearRect(0,0,w,h);
+    octx.drawImage(source,0,0,w,h);
+
+    const maxSide=interactive?460:900;
+    const scale=Math.min(1,maxSide/Math.max(w,h));
+    const sw=Math.max(2,Math.round(w*scale));
+    const sh=Math.max(2,Math.round(h*scale));
+
+    const depthSmall=offscreen(sw,sh), dctx=depthSmall.getContext('2d');
+    dctx.imageSmoothingEnabled=true;
+    dctx.drawImage(depthCanvas,0,0,depthCanvas.width,depthCanvas.height,0,0,sw,sh);
+    const depthData=dctx.getImageData(0,0,sw,sh).data;
+
+    const maskSmall=offscreen(sw,sh), mctx=maskSmall.getContext('2d');
+    mctx.imageSmoothingEnabled=true;
+    mctx.drawImage(backgroundMask,0,0,w,h,0,0,sw,sh);
+    const maskData=mctx.getImageData(0,0,sw,sh).data;
+
+    const thresholds=[[0.06,0.20],[0.16,0.34],[0.30,0.50],[0.46,0.70],[0.64,0.92]];
+    const masks=thresholds.map(()=>offscreen(sw,sh));
+    const masksData=masks.map(c=>c.getContext('2d').createImageData(sw,sh));
+
+    const focusBand=0.012 + (1-dof)*0.11;
+    const transition=0.16 + dof*0.26;
+
+    for(let y=0;y<sh;y++){
+      for(let x=0;x<sw;x++){
+        const p=(y*sw+x)*4;
+        const bgAlpha=maskData[p+3]/255;
+        if(bgAlpha<=0.003) continue;
+        const z=getDepthValueFromData(depthData,p);
+        let delta=Math.abs(z-focus);
+        if(z<focus) delta*=0.72;
+        let coc=smoothstep(focusBand, focusBand+transition, delta);
+        coc=Math.pow(coc,0.88);
+        coc*=Math.pow(bgAlpha,1.08);
+        for(let k=0;k<thresholds.length;k++){
+          const [a,b]=thresholds[k];
+          const alpha=bgAlpha*smoothstep(a,b,coc);
+          const data=masksData[k].data;
+          data[p]=255; data[p+1]=255; data[p+2]=255; data[p+3]=Math.round(alpha*255);
+        }
+      }
+    }
+    for(let k=0;k<masks.length;k++) masks[k].getContext('2d').putImageData(masksData[k],0,0);
+
+    const baseRadius=Math.max(1.2, v.blur*(0.34+aperture*0.92)*(0.55+dof*0.72));
+    const radii=[0.34,0.56,0.82,1.12,1.48].map(f=>Math.max(0.8,baseRadius*f));
+    const layerOpacities=[0.44,0.58,0.72,0.86,0.98];
+
+    for(let k=0;k<radii.length;k++){
+      const blurred=buildSmoothGaussianBlur(source,w,h,radii[k],interactive);
+      const layer=offscreen(w,h);
+      const lctx=layer.getContext('2d');
+      lctx.imageSmoothingEnabled=true;
+      if('imageSmoothingQuality' in lctx) lctx.imageSmoothingQuality='high';
+      lctx.clearRect(0,0,w,h);
+      lctx.drawImage(blurred,0,0,w,h);
+      lctx.globalCompositeOperation='destination-in';
+      lctx.drawImage(masks[k],0,0,sw,sh,0,0,w,h);
+      lctx.globalCompositeOperation='source-over';
+      octx.globalAlpha=layerOpacities[k];
+      octx.drawImage(layer,0,0,w,h);
+      octx.globalAlpha=1;
+    }
+    return out;
+  }
+
   function subjectMaskFromBackgroundMask(mask,w,h){
     const out=offscreen(w,h);
     const octx=out.getContext('2d');
@@ -938,7 +1036,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
   function getDofGLState(){
     if(dofGLState) return dofGLState;
     const glCanvas=document.createElement('canvas');
-    const gl=glCanvas.getContext('webgl2',{alpha:true,premultipliedAlpha:false,antialias:false,preserveDrawingBuffer:true});
+    const gl=glCanvas.getContext('webgl2',{preserveDrawingBuffer:true,alpha:false,premultipliedAlpha:false,antialias:false});
     if(!gl) return null;
     const vs=`#version 300 es
 precision highp float;
@@ -1451,6 +1549,11 @@ void main(){
     return out;
   }
 
+  function getProcessingBackgroundMask(w,h){
+    if(!autoBackgroundMask) return null;
+    return aiDepthCanvas ? buildLensBackgroundMask(w,h) : buildEffectiveBackgroundMask(w,h);
+  }
+
   function applyFilter(src,w,h){
     const v=values();
     const out=applyBasicAdjustments(src,w,h,v);
@@ -1476,22 +1579,22 @@ void main(){
     let out=filtered;
 
     if($('blurOn').checked && mask){
-      // AI深度マップがある場合は WebGL2 の深度依存 Circle-of-Confusion 方式を優先。
-      // 人物マスク外だけをサンプリングし、輪郭への背景色の滲みを抑える。
       if(aiDepthCanvas){
-        const depthOut=applyDepthAwareDofWebGL(filtered,aiDepthCanvas,mask,w,h,v);
+        const depthOut=applyDepthMapGaussianDefocus(filtered,aiDepthCanvas,mask,w,h,v,interactive);
         if(depthOut) out=depthOut;
       }
 
-      // WebGL2非対応 / 深度推定前は、従来の軽量プログレッシブ方式へフォールバック。
       if(out===filtered){
         const merged=offscreen(w,h);
         const mctx=merged.getContext('2d');
+        mctx.imageSmoothingEnabled=true;
+        if('imageSmoothingQuality' in mctx) mctx.imageSmoothingQuality='high';
+        mctx.clearRect(0,0,w,h);
         mctx.drawImage(filtered,0,0);
         const aperture=apertureStrength(v.aperture);
-        const maxRadius=Math.max(0.6,v.blur*(0.18+aperture*1.22));
+        const maxRadius=Math.max(1.0,v.blur*(0.30+aperture*0.90)*(0.55+v.depth*0.75));
         if(v.depth<=0.001){
-          const blurred=buildScaleBlur(filtered,w,h,maxRadius);
+          const blurred=buildSmoothGaussianBlur(filtered,w,h,maxRadius,interactive);
           const blurLayer=offscreen(w,h), bctx=blurLayer.getContext('2d');
           bctx.drawImage(blurred,0,0);
           bctx.globalCompositeOperation='destination-in';
@@ -1501,9 +1604,10 @@ void main(){
         }else{
           const depthInfo=buildProgressiveDepthLayers(mask,w,h,v.depth);
           if(depthInfo){
-            const radii=[0.22,0.42,0.68,1.00].map(f=>Math.max(0.45,maxRadius*f));
+            const radii=[0.30,0.52,0.80,1.15].map(f=>Math.max(0.8,maxRadius*f));
+            const opacities=[0.50,0.66,0.82,0.96];
             for(let k=0;k<4;k++){
-              const blurred=buildScaleBlur(filtered,w,h,radii[k]);
+              const blurred=buildSmoothGaussianBlur(filtered,w,h,radii[k],interactive);
               const layer=offscreen(w,h), lctx=layer.getContext('2d');
               lctx.drawImage(blurred,0,0);
               lctx.globalCompositeOperation='destination-in';
@@ -1511,7 +1615,9 @@ void main(){
               if('imageSmoothingQuality' in lctx) lctx.imageSmoothingQuality='high';
               lctx.drawImage(depthInfo.layers[k],0,0,depthInfo.sw,depthInfo.sh,0,0,w,h);
               lctx.globalCompositeOperation='source-over';
+              mctx.globalAlpha=opacities[k];
               mctx.drawImage(layer,0,0);
+              mctx.globalAlpha=1;
             }
           }
         }
@@ -1523,7 +1629,6 @@ void main(){
       }
     }
 
-    // これは既存の「被写体くっきり」調整。背景ぼかし自体は人物の画素を変更しない。
     if(!interactive && v.subjectPop>0 && mask){
       out=applySubjectPop(out,w,h,mask,v.subjectPop);
     }
@@ -1531,6 +1636,7 @@ void main(){
   }
 
   function render(mode='full'){
+
     if(!srcCanvas) return;
     const usePreview=mode==='preview';
     ctx.clearRect(0,0,workW,workH);
@@ -1541,7 +1647,7 @@ void main(){
       return;
     }
     const sourceInfo=usePreview ? getPreviewSource() : {canvas:srcCanvas,w:workW,h:workH};
-    const effective=aiDepthCanvas?buildLensBackgroundMask(sourceInfo.w,sourceInfo.h):buildEffectiveBackgroundMask(sourceInfo.w,sourceInfo.h);
+    const effective=getProcessingBackgroundMask(sourceInfo.w,sourceInfo.h);
     const out=composeProcessed(sourceInfo.canvas,sourceInfo.w,sourceInfo.h,effective,usePreview);
     if(usePreview && (sourceInfo.w!==workW || sourceInfo.h!==workH)) ctx.drawImage(out,0,0,sourceInfo.w,sourceInfo.h,0,0,workW,workH);
     else ctx.drawImage(out,0,0);
@@ -1946,6 +2052,32 @@ void main(){
   }
 
 
+  function openPendingSaveWindow(){
+    try{
+      const win=window.open('about:blank','_blank');
+      if(win){
+        win.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Palette Studio</title><style>body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;background:#0b1020;color:#eef4ff;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:24px;text-align:center}p{line-height:1.8}</style></head><body><p>画像を準備しています…<br>このまま少しお待ちください。</p></body></html>');
+        win.document.close();
+      }
+      return win;
+    }catch(_err){
+      return null;
+    }
+  }
+
+  function showImageInWindow(win,blob){
+    const url=URL.createObjectURL(blob);
+    if(win && !win.closed){
+      win.document.open();
+      win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Palette Studio</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;background:#08101d;color:#eef4ff;margin:0;padding:18px;text-align:center}img{max-width:100%;height:auto;border-radius:12px;box-shadow:0 18px 48px rgba(0,0,0,.32)}p{line-height:1.8;margin:0 0 14px}.wrap{max-width:980px;margin:0 auto}</style></head><body><div class="wrap"><p>画像を開きました。<br>iPhone / iPadでは画像を長押しして「写真に保存」を選んでください。</p><img alt="saved image" src="${url}"></div></body></html>`);
+      win.document.close();
+    }else{
+      window.open(url,'_blank');
+    }
+    setTimeout(()=>URL.revokeObjectURL(url),60000);
+  }
+
+
   function getExportSpec(){
     const requested=$('saveSize').value;
     let w=fullW, h=fullH;
@@ -1965,6 +2097,14 @@ void main(){
 
   async function exportImage(){
     const spec=getExportSpec();
+    const exportCanvas=document.createElement('canvas');
+    exportCanvas.width=spec.w;
+    exportCanvas.height=spec.h;
+    const xctx=exportCanvas.getContext('2d',{alpha:false});
+    xctx.imageSmoothingEnabled=true;
+    if('imageSmoothingQuality' in xctx) xctx.imageSmoothingQuality='high';
+    xctx.clearRect(0,0,spec.w,spec.h);
+
     const exportSrc=offscreen(spec.w,spec.h);
     const esctx=exportSrc.getContext('2d');
     esctx.imageSmoothingEnabled=true;
@@ -1972,21 +2112,14 @@ void main(){
     esctx.clearRect(0,0,spec.w,spec.h);
     esctx.drawImage(fullImg,0,0,fullW,fullH,0,0,spec.w,spec.h);
 
-    let exportMask=null;
-    if(autoBackgroundMask) exportMask=buildEffectiveBackgroundMask(spec.w,spec.h);
-    const processed=composeProcessed(exportSrc,spec.w,spec.h,exportMask,false);
-
-    const exportCanvas=offscreen(spec.w,spec.h);
-    const xctx=exportCanvas.getContext('2d');
-    xctx.imageSmoothingEnabled=true;
-    if('imageSmoothingQuality' in xctx) xctx.imageSmoothingQuality='high';
-    xctx.clearRect(0,0,spec.w,spec.h);
-    xctx.drawImage(processed,0,0,spec.w,spec.h);
+    const exportMask=getProcessingBackgroundMask(spec.w,spec.h);
+    const rendered=showAfter ? composeProcessed(exportSrc,spec.w,spec.h,exportMask,false) : exportSrc;
+    xctx.drawImage(rendered,0,0,spec.w,spec.h);
     if($('copyrightOn').checked) drawCopyrightWatermark(xctx,spec.w,spec.h);
 
     const blob=await canvasToBlobSafe(exportCanvas,spec.mime,spec.quality);
     if(!blob || !blob.size) throw new Error('画像の書き出しに失敗しました');
-    return {blob,spec};
+    return {blob,spec,canvas:exportCanvas};
   }
 
   function setSaveBusy(busy,label='保存データを作成中…'){
@@ -2052,25 +2185,41 @@ void main(){
 
   async function saveByDownload(){
     if(!fullImg) return;
+    const iosWindow=isIOSLike()?openPendingSaveWindow():null;
     setSaveBusy(true);
     setSaveStatus('保存用データを作成しています…');
     try{
       await ensureMaskReadyForSave();
       await new Promise(requestAnimationFrame);
       const {blob,spec}=await exportImage();
-      const result=await triggerBlobDownload(blob,spec.fileName);
-      if(result==='share'){
-        setSaveStatus('iPhone / iPadでは共有メニューを開きました。「画像を保存」を選ぶと写真アプリに入れられます。');
-        showToast('共有メニューを開きました。','success');
-      }else if(result==='tab'){
-        setSaveStatus('新しいタブで画像を開きました。表示された画像を長押しまたは右クリックして保存してください。');
-        showToast('新しいタブで画像を開きました。','info');
+      if(isIOSLike()){
+        if(iosWindow){
+          showImageInWindow(iosWindow,blob);
+          setSaveStatus('画像を新しいタブで開きました。iPhone / iPadでは画像を長押しして「写真に保存」を選んでください。');
+          showToast('保存用の画像を開きました。','success');
+        }else{
+          const result=await triggerBlobDownload(blob,spec.fileName);
+          if(result==='share'){
+            setSaveStatus('共有メニューを開きました。「画像を保存」を選ぶと写真アプリへ保存できます。');
+            showToast('共有メニューを開きました。','success');
+          }else{
+            setSaveStatus('画像を開きました。表示された画像を長押しして保存してください。');
+            showToast('画像を開きました。','info');
+          }
+        }
       }else{
-        setSaveStatus(`${spec.fileName} を端末に保存しました。`);
-        showToast('端末に保存しました。','success');
+        const result=await triggerBlobDownload(blob,spec.fileName);
+        if(result==='tab'){
+          setSaveStatus('新しいタブで画像を開きました。表示された画像を右クリックして保存してください。');
+          showToast('新しいタブで画像を開きました。','info');
+        }else{
+          setSaveStatus(`${spec.fileName} を端末に保存しました。`);
+          showToast('端末に保存しました。','success');
+        }
       }
     }catch(err){
       console.error(err);
+      if(iosWindow && !iosWindow.closed) iosWindow.close();
       const reason=err && err.message ? err.message : '不明なエラー';
       setSaveStatus(`端末への保存に失敗しました。${reason}`);
       showToast('保存に失敗しました。','error');
