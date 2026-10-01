@@ -201,7 +201,8 @@ button:disabled{opacity:.55;cursor:not-allowed}
       <div class="row"><span>被写界深度</span><input id="depthOfField" type="range" min="0" max="100" value="42"><output id="depthOfFieldOut">42</output></div>
       <div class="row"><span>境界なめらかさ</span><input id="edgeSoftness" type="range" min="0" max="100" value="48"><output id="edgeSoftnessOut">48</output></div>
       <div class="row"><span>ボケの最大半径</span><input id="bokehRadius" type="range" min="0" max="100" value="34"><output id="bokehRadiusOut">34</output></div>
-      <div class="row"><span>フチの強調度</span><input id="ringIntensity" type="range" min="0" max="100" value="56"><output id="ringIntensityOut">56</output></div>
+      <div class="row"><span>フチの強調度</span><input id="ringIntensity" type="range" min="0" max="100" value="42"><output id="ringIntensityOut">42</output></div>
+      <div class="row"><span>中心の透け感</span><input id="bokehCenterHollow" type="range" min="0" max="100" value="34"><output id="bokehCenterHollowOut">34</output></div>
       <div class="row"><span>輝度しきい値</span><input id="highlightThreshold" type="range" min="0" max="100" value="68"><output id="highlightThresholdOut">68</output></div>
       <div class="row"><span>ボケの明るさ</span><input id="bokehIntensity" type="range" min="0" max="100" value="38"><output id="bokehIntensityOut">38</output></div>
       <div class="row"><span>ボケ密度</span><input id="bokehDensity" type="range" min="0" max="100" value="78"><output id="bokehDensityOut">78</output></div>
@@ -306,7 +307,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
   const processingOverlay=$('processingOverlay'), overlayText=$('overlayText'), overlaySub=$('overlaySub');
   const stickySavebar=$('stickySavebar'), btnSaveSticky=$('btnSaveSticky'), btnShareSticky=$('btnShareSticky');
   const toastEl=$('toast'), toastText=$('toastText');
-  const sliderIds=['apertureF','blurStrength','focusDepth','depthOfField','edgeSoftness','bokehRadius','ringIntensity','highlightThreshold','bokehIntensity','bokehDensity','bokehFringe','brushSize','filterStrength','bright','sat','contrast','warmth','glow','subjectPop','copyrightOffsetX','copyrightOffsetY','copyrightScale','copyrightOpacity'];
+  const sliderIds=['apertureF','blurStrength','focusDepth','depthOfField','edgeSoftness','bokehRadius','ringIntensity','bokehCenterHollow','highlightThreshold','bokehIntensity','bokehDensity','bokehFringe','brushSize','filterStrength','bright','sat','contrast','warmth','glow','subjectPop','copyrightOffsetX','copyrightOffsetY','copyrightScale','copyrightOpacity'];
   sliderIds.forEach(id=>{const el=$(id), out=$(id+'Out'); out.textContent=el.value; el.addEventListener('input',()=>out.textContent=el.value);});
 
   let fullImg=null, fullW=0, fullH=0, workW=0, workH=0, srcCanvas=null;
@@ -1341,6 +1342,7 @@ uniform float u_focus;
 uniform float u_dof;
 uniform float u_radius;
 uniform float u_ring;
+uniform float u_centerHollow;
 uniform float u_threshold;
 uniform float u_intensity;
 uniform float u_aperture;
@@ -1446,9 +1448,23 @@ void main(){
 
     if(u_enableBokeh>0.5){
       float lum=luma(sampleRgb);
-      float hi=smoothstep(u_threshold,min(1.0,u_threshold+0.18),lum);
-      float ring=smoothstep(0.56,0.99,radial);
-      float ringWeight=mix(0.32+0.68*(1.0-radial*0.22),0.18+1.48*ring,u_ring);
+      float hi=smoothstep(u_threshold,min(1.0,u_threshold+0.16),lum);
+
+      // Optical disc profile: filled center -> subtle hollow center -> soft bright rim.
+      float centerZone=1.0-smoothstep(0.18,0.70,radial);
+      float midBody=1.0-smoothstep(0.52,1.04,radial);
+      float ringBand=smoothstep(0.58,0.82,radial)*(1.0-smoothstep(0.94,1.06,radial));
+
+      // Step 1: keep the rim visible without making it look cut-out.
+      float baseRingWeight=0.88-radial*0.22;
+      float ringLift=u_ring*(ringBand*0.95);
+
+      // Step 2: gradually reduce only the center energy. 0 = filled lens bokeh, 1 = bubble-like hollow center.
+      float centerReduction=centerZone*u_centerHollow*0.52;
+      float bodySupport=midBody*(0.08+0.10*(1.0-u_centerHollow));
+      float ringWeight=baseRingWeight+ringLift+bodySupport-centerReduction;
+      ringWeight=clamp(ringWeight,0.14,1.45);
+
       float farOnly=smoothstep(u_focus+focusBand*0.15,u_focus+focusBand+0.24,sz);
       float hw=hi*ringWeight*depthCompat*maskWeight*farOnly;
 
@@ -1478,8 +1494,8 @@ void main(){
   if(u_enableBokeh>0.5 && highlightWeight>0.0001){
     vec3 highlight=highlightSum/max(highlightWeight,1.0);
     float overlap=min(2.8,highlightWeight/4.6);
-    vec3 add=highlight*(u_intensity*(0.22+overlap*0.24))*coc*max(edgeGuard,boundaryLift*1.3);
-    result=vec3(1.0)-((vec3(1.0)-result)*exp(-add*1.65));
+    vec3 add=highlight*(u_intensity*(0.18+overlap*0.20))*coc*max(edgeGuard,boundaryLift*1.22);
+    result=vec3(1.0)-((vec3(1.0)-result)*exp(-add*1.42));
   }
 
   outColor=vec4(clamp(result,0.0,1.0),1.0);
@@ -1570,6 +1586,7 @@ void main(){
     gl.uniform1f(gl.getUniformLocation(program,'u_dof'),clamp01(v.depth));
     gl.uniform1f(gl.getUniformLocation(program,'u_radius'),Math.max(0.5,(v.blur*0.46+v.bokehRadius*0.26)*scale));
     gl.uniform1f(gl.getUniformLocation(program,'u_ring'),clamp01(v.ringIntensity));
+    gl.uniform1f(gl.getUniformLocation(program,'u_centerHollow'),clamp01(v.bokehCenterHollow));
     gl.uniform1f(gl.getUniformLocation(program,'u_threshold'),0.34+clamp01(v.highlightThreshold)*0.60);
     gl.uniform1f(gl.getUniformLocation(program,'u_intensity'),clamp01(v.bokehIntensity));
     gl.uniform1f(gl.getUniformLocation(program,'u_aperture'),0.55+apertureStrength(v.aperture)*0.95);
@@ -1688,6 +1705,7 @@ void main(){
       depth:+$('depthOfField').value/100,
       bokehRadius:+$('bokehRadius').value,
       ringIntensity:+$('ringIntensity').value/100,
+      bokehCenterHollow:+$('bokehCenterHollow').value/100,
       highlightThreshold:+$('highlightThreshold').value/100,
       bokehIntensity:+$('bokehIntensity').value/100,
       bokehDensity:+$('bokehDensity').value/100,
