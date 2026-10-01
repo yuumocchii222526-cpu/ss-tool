@@ -200,12 +200,14 @@ button:disabled{opacity:.55;cursor:not-allowed}
       <div class="row"><span>焦点深度</span><input id="focusDepth" type="range" min="0" max="100" value="35"><output id="focusDepthOut">35</output></div>
       <div class="row"><span>被写界深度</span><input id="depthOfField" type="range" min="0" max="100" value="42"><output id="depthOfFieldOut">42</output></div>
       <div class="row"><span>境界なめらかさ</span><input id="edgeSoftness" type="range" min="0" max="100" value="48"><output id="edgeSoftnessOut">48</output></div>
-      <div class="row" style="align-items:flex-start;"><span style="padding-top:10px;">ボケ形状</span><select id="bokehShape" aria-label="ボケ形状"><option value="off" selected>なし</option><option value="circle">円形（Smooth Circle）</option><option value="star">星型</option><option value="hexagon">六角形</option></select></div>
-      <div class="row"><span>形状サイズ</span><input id="bokehSize" type="range" min="0" max="100" value="18"><output id="bokehSizeOut">18</output></div>
-      <div class="row"><span>玉ボケ明るさ</span><input id="bokehIntensity" type="range" min="0" max="100" value="28"><output id="bokehIntensityOut">28</output></div>
-      <div class="row"><span>ボケ密度</span><input id="bokehDensity" type="range" min="0" max="100" value="72"><output id="bokehDensityOut">72</output></div>
-      <div class="row"><span>色にじみ</span><input id="bokehFringe" type="range" min="0" max="100" value="12"><output id="bokehFringeOut">12</output></div>
-      <p class="mini" style="margin-top:6px;">焦点深度は 0=手前、100=奥です。被写界深度を上げるほどピントが合う範囲が広くなります。人物は背景ぼかしの対象外として保護します。選んだボケ形状は、奥側の背景ハイライトを小さく自然な光としてなじませます。円形（Smooth Circle）は控えめで背景色に溶け込む標準モードです。ボケ密度でサンプル量、色にじみで色収差の強さを調整できます。</p>
+      <div class="row" style="align-items:flex-start;"><span style="padding-top:10px;">ボケ形状</span><select id="bokehShape" aria-label="ボケ形状"><option value="circle" selected>円形（Cinematic Bubble）</option><option value="star">星型</option><option value="hexagon">六角形</option><option value="off">玉ボケなし</option></select></div>
+      <div class="row"><span>ボケの最大半径</span><input id="bokehRadius" type="range" min="0" max="100" value="34"><output id="bokehRadiusOut">34</output></div>
+      <div class="row"><span>フチの強調度</span><input id="ringIntensity" type="range" min="0" max="100" value="56"><output id="ringIntensityOut">56</output></div>
+      <div class="row"><span>輝度しきい値</span><input id="highlightThreshold" type="range" min="0" max="100" value="68"><output id="highlightThresholdOut">68</output></div>
+      <div class="row"><span>ボケの明るさ</span><input id="bokehIntensity" type="range" min="0" max="100" value="38"><output id="bokehIntensityOut">38</output></div>
+      <div class="row"><span>ボケ密度</span><input id="bokehDensity" type="range" min="0" max="100" value="78"><output id="bokehDensityOut">78</output></div>
+      <div class="row"><span>色にじみ</span><input id="bokehFringe" type="range" min="0" max="100" value="8"><output id="bokehFringeOut">8</output></div>
+      <p class="mini" style="margin-top:6px;">円形は48サンプルの多重リング型デフォーカスを使い、明るい背景だけ外周が少し強くなるバブルボケとして描画します。輝度しきい値を上げるほど強い光源だけが玉ボケになります。人物境界では深度差と背景マスクを使ってサンプルを抑え、髪・耳・輪郭への色滲みを防ぎます。</p>
       <div class="small-actions" style="margin-top:8px;">
         <button type="button" id="focusSubjectBtn">人物にピント</button>
         <button type="button" id="toggleDepthPreview">深度マップを見る</button>
@@ -305,7 +307,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
   const processingOverlay=$('processingOverlay'), overlayText=$('overlayText'), overlaySub=$('overlaySub');
   const stickySavebar=$('stickySavebar'), btnSaveSticky=$('btnSaveSticky'), btnShareSticky=$('btnShareSticky');
   const toastEl=$('toast'), toastText=$('toastText');
-  const sliderIds=['apertureF','blurStrength','focusDepth','depthOfField','edgeSoftness','bokehSize','bokehIntensity','bokehDensity','bokehFringe','brushSize','filterStrength','bright','sat','contrast','warmth','glow','subjectPop','copyrightOffsetX','copyrightOffsetY','copyrightScale','copyrightOpacity'];
+  const sliderIds=['apertureF','blurStrength','focusDepth','depthOfField','edgeSoftness','bokehRadius','ringIntensity','highlightThreshold','bokehIntensity','bokehDensity','bokehFringe','brushSize','filterStrength','bright','sat','contrast','warmth','glow','subjectPop','copyrightOffsetX','copyrightOffsetY','copyrightScale','copyrightOpacity'];
   sliderIds.forEach(id=>{const el=$(id), out=$(id+'Out'); out.textContent=el.value; el.addEventListener('input',()=>out.textContent=el.value);});
 
   let fullImg=null, fullW=0, fullH=0, workW=0, workH=0, srcCanvas=null;
@@ -1231,6 +1233,254 @@ void main(){
   }
 
 
+  let cinematicBokehGLState=null;
+  function getCinematicBokehGLState(){
+    if(cinematicBokehGLState) return cinematicBokehGLState;
+    const glCanvas=document.createElement('canvas');
+    const gl=glCanvas.getContext('webgl2',{
+      preserveDrawingBuffer:true,
+      alpha:false,
+      premultipliedAlpha:false,
+      antialias:false,
+      depth:false,
+      stencil:false
+    });
+    if(!gl) return null;
+
+    const vs=`#version 300 es
+precision highp float;
+in vec2 a_pos;
+in vec2 a_uv;
+out vec2 v_uv;
+void main(){
+  v_uv=a_uv;
+  gl_Position=vec4(a_pos,0.0,1.0);
+}`;
+
+    const fs=`#version 300 es
+precision highp float;
+uniform sampler2D u_image;
+uniform sampler2D u_depth;
+uniform sampler2D u_mask;
+uniform vec2 u_texel;
+uniform float u_focus;
+uniform float u_dof;
+uniform float u_radius;
+uniform float u_ring;
+uniform float u_threshold;
+uniform float u_intensity;
+uniform float u_aperture;
+uniform float u_density;
+uniform float u_fringe;
+uniform float u_enableBokeh;
+in vec2 v_uv;
+out vec4 outColor;
+
+const int N=48;
+const vec2 OFF[N]=vec2[N](
+ vec2( 0.0000, 0.0000), vec2( 0.2120, 0.0000), vec2( 0.0655, 0.2016), vec2(-0.1715, 0.1246),
+ vec2(-0.1715,-0.1246), vec2( 0.0655,-0.2016), vec2( 0.3900, 0.0000), vec2( 0.2758, 0.2758),
+ vec2( 0.0000, 0.3900), vec2(-0.2758, 0.2758), vec2(-0.3900, 0.0000), vec2(-0.2758,-0.2758),
+ vec2( 0.0000,-0.3900), vec2( 0.2758,-0.2758), vec2( 0.5600, 0.0000), vec2( 0.4850, 0.2800),
+ vec2( 0.2800, 0.4850), vec2( 0.0000, 0.5600), vec2(-0.2800, 0.4850), vec2(-0.4850, 0.2800),
+ vec2(-0.5600, 0.0000), vec2(-0.4850,-0.2800), vec2(-0.2800,-0.4850), vec2( 0.0000,-0.5600),
+ vec2( 0.2800,-0.4850), vec2( 0.4850,-0.2800), vec2( 0.7350, 0.0000), vec2( 0.6791, 0.2813),
+ vec2( 0.5197, 0.5197), vec2( 0.2813, 0.6791), vec2( 0.0000, 0.7350), vec2(-0.2813, 0.6791),
+ vec2(-0.5197, 0.5197), vec2(-0.6791, 0.2813), vec2(-0.7350, 0.0000), vec2(-0.6791,-0.2813),
+ vec2(-0.5197,-0.5197), vec2(-0.2813,-0.6791), vec2( 0.0000,-0.7350), vec2( 0.2813,-0.6791),
+ vec2( 0.5197,-0.5197), vec2( 0.6791,-0.2813), vec2( 0.9250, 0.0000), vec2( 0.6539, 0.6539),
+ vec2( 0.0000, 0.9250), vec2(-0.6539, 0.6539), vec2(-0.9250, 0.0000), vec2( 0.0000,-0.9250)
+);
+
+float luma(vec3 c){return dot(c,vec3(0.2126,0.7152,0.0722));}
+float sat01(float x){return clamp(x,0.0,1.0);}
+
+void main(){
+  vec4 center=texture(u_image,v_uv);
+  float centerMask=texture(u_mask,v_uv).a;
+  if(centerMask<0.012){outColor=center;return;}
+
+  float z=texture(u_depth,v_uv).r;
+  float focusBand=mix(0.012,0.145,u_dof);
+  float delta=abs(z-u_focus);
+  float coc=smoothstep(focusBand,focusBand+0.28,delta);
+  if(z<u_focus) coc*=0.72;
+  float radius=max(0.0,u_radius*u_aperture*coc);
+  if(radius<0.20){outColor=center;return;}
+
+  vec3 colorSum=center.rgb*1.20;
+  float weightSum=1.20;
+  vec3 highlightSum=vec3(0.0);
+  float highlightWeight=0.0;
+
+  for(int i=1;i<N;i++){
+    float idx=float(i)/float(N-1);
+    if(idx>mix(0.50,1.0,u_density)) continue;
+
+    vec2 off=OFF[i];
+    float radial=length(off);
+    vec2 suv=clamp(v_uv+off*u_texel*radius,vec2(0.001),vec2(0.999));
+    float sm=texture(u_mask,suv).a;
+    if(sm<0.05) continue;
+
+    float sz=texture(u_depth,suv).r;
+    float depthDiff=abs(sz-z);
+    float depthCompat=1.0-smoothstep(0.025,0.20,depthDiff);
+    float foregroundGuard=smoothstep(-0.012,0.045,sz-z);
+    float maskWeight=smoothstep(0.05,0.82,sm);
+    float baseWeight=(0.52+0.48*(1.0-radial*0.35))*depthCompat*maskWeight*(0.42+0.58*foregroundGuard);
+
+    vec3 sampleRgb=texture(u_image,suv).rgb;
+    colorSum+=sampleRgb*baseWeight;
+    weightSum+=baseWeight;
+
+    if(u_enableBokeh>0.5){
+      float lum=luma(sampleRgb);
+      float hi=smoothstep(u_threshold,min(1.0,u_threshold+0.18),lum);
+      float ring=smoothstep(0.54,0.98,radial);
+      float ringWeight=mix(0.30+0.70*(1.0-radial*0.24),0.16+1.55*ring,u_ring);
+      float farOnly=smoothstep(u_focus+focusBand*0.18,u_focus+focusBand+0.24,sz);
+      float hw=hi*ringWeight*depthCompat*maskWeight*farOnly;
+
+      if(u_fringe>0.001){
+        vec2 dir=radial>0.001?normalize(off):vec2(1.0,0.0);
+        vec2 fringeOffset=dir*u_texel*radius*u_fringe*0.06;
+        float r=texture(u_image,clamp(suv+fringeOffset,vec2(0.001),vec2(0.999))).r;
+        float g=sampleRgb.g;
+        float b=texture(u_image,clamp(suv-fringeOffset,vec2(0.001),vec2(0.999))).b;
+        sampleRgb=vec3(r,g,b);
+      }
+
+      highlightSum+=sampleRgb*hw;
+      highlightWeight+=hw;
+    }
+  }
+
+  vec3 defocused=colorSum/max(weightSum,0.0001);
+  float edgeGuard=smoothstep(0.04,0.88,centerMask);
+  float defocusMix=sat01(coc*edgeGuard*(0.78+0.22*u_aperture));
+  vec3 result=mix(center.rgb,defocused,defocusMix);
+
+  if(u_enableBokeh>0.5 && highlightWeight>0.0001){
+    vec3 highlight=highlightSum/max(highlightWeight,1.0);
+    float overlap=min(2.6,highlightWeight/5.0);
+    vec3 add=highlight*(u_intensity*(0.24+overlap*0.26))*coc*edgeGuard;
+    result=vec3(1.0)-((vec3(1.0)-result)*exp(-add*1.65));
+  }
+
+  outColor=vec4(clamp(result,0.0,1.0),1.0);
+}`;
+
+    function compile(type,source){
+      const s=gl.createShader(type);
+      gl.shaderSource(s,source);
+      gl.compileShader(s);
+      if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)||'shader compile failed');
+      return s;
+    }
+
+    try{
+      const program=gl.createProgram();
+      gl.attachShader(program,compile(gl.VERTEX_SHADER,vs));
+      gl.attachShader(program,compile(gl.FRAGMENT_SHADER,fs));
+      gl.linkProgram(program);
+      if(!gl.getProgramParameter(program,gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program)||'shader link failed');
+      const verts=new Float32Array([
+        -1,-1, 0,1,   1,-1, 1,1,  -1,1, 0,0,
+        -1,1, 0,0,    1,-1, 1,1,   1,1, 1,0
+      ]);
+      const buffer=gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER,buffer);
+      gl.bufferData(gl.ARRAY_BUFFER,verts,gl.STATIC_DRAW);
+      const stride=4*4;
+      const aPos=gl.getAttribLocation(program,'a_pos');
+      const aUv=gl.getAttribLocation(program,'a_uv');
+      gl.enableVertexAttribArray(aPos);gl.vertexAttribPointer(aPos,2,gl.FLOAT,false,stride,0);
+      gl.enableVertexAttribArray(aUv);gl.vertexAttribPointer(aUv,2,gl.FLOAT,false,stride,2*4);
+      const tex=[gl.createTexture(),gl.createTexture(),gl.createTexture()];
+      cinematicBokehGLState={glCanvas,gl,program,buffer,tex};
+      return cinematicBokehGLState;
+    }catch(err){
+      console.error('Cinematic bokeh WebGL init failed',err);
+      cinematicBokehGLState=null;
+      return null;
+    }
+  }
+
+  function uploadCinematicTexture(gl,tex,unit,source){
+    gl.activeTexture(gl.TEXTURE0+unit);
+    gl.bindTexture(gl.TEXTURE_2D,tex);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,source);
+  }
+
+  function applyCinematicBokehWebGL(source,depthCanvas,backgroundMask,w,h,v,interactive=false){
+    if(!source||!depthCanvas||!backgroundMask) return null;
+    const state=getCinematicBokehGLState();
+    if(!state) return null;
+
+    const maxSide=interactive?620:960;
+    const scale=Math.min(1,maxSide/Math.max(w,h));
+    const sw=Math.max(2,Math.round(w*scale));
+    const sh=Math.max(2,Math.round(h*scale));
+    const srcSmall=offscreen(sw,sh), sctx=srcSmall.getContext('2d');
+    sctx.imageSmoothingEnabled=true;
+    if('imageSmoothingQuality' in sctx)sctx.imageSmoothingQuality='high';
+    sctx.drawImage(source,0,0,w,h,0,0,sw,sh);
+
+    const depthSmall=offscreen(sw,sh), dctx=depthSmall.getContext('2d');
+    dctx.imageSmoothingEnabled=true;
+    dctx.drawImage(depthCanvas,0,0,depthCanvas.width,depthCanvas.height,0,0,sw,sh);
+
+    const maskSmall=offscreen(sw,sh), mctx=maskSmall.getContext('2d');
+    mctx.imageSmoothingEnabled=true;
+    mctx.drawImage(backgroundMask,0,0,w,h,0,0,sw,sh);
+
+    const {glCanvas,gl,program,tex}=state;
+    glCanvas.width=sw; glCanvas.height=sh;
+    gl.viewport(0,0,sw,sh);
+    gl.useProgram(program);
+    uploadCinematicTexture(gl,tex[0],0,srcSmall);
+    uploadCinematicTexture(gl,tex[1],1,depthSmall);
+    uploadCinematicTexture(gl,tex[2],2,maskSmall);
+
+    gl.uniform1i(gl.getUniformLocation(program,'u_image'),0);
+    gl.uniform1i(gl.getUniformLocation(program,'u_depth'),1);
+    gl.uniform1i(gl.getUniformLocation(program,'u_mask'),2);
+    gl.uniform2f(gl.getUniformLocation(program,'u_texel'),1/sw,1/sh);
+    gl.uniform1f(gl.getUniformLocation(program,'u_focus'),clamp01(v.focus));
+    gl.uniform1f(gl.getUniformLocation(program,'u_dof'),clamp01(v.depth));
+    gl.uniform1f(gl.getUniformLocation(program,'u_radius'),Math.max(0.5,(v.blur*0.46+v.bokehRadius*0.26)*scale));
+    gl.uniform1f(gl.getUniformLocation(program,'u_ring'),clamp01(v.ringIntensity));
+    gl.uniform1f(gl.getUniformLocation(program,'u_threshold'),0.34+clamp01(v.highlightThreshold)*0.60);
+    gl.uniform1f(gl.getUniformLocation(program,'u_intensity'),clamp01(v.bokehIntensity));
+    gl.uniform1f(gl.getUniformLocation(program,'u_aperture'),0.55+apertureStrength(v.aperture)*0.95);
+    gl.uniform1f(gl.getUniformLocation(program,'u_density'),clamp01(v.bokehDensity));
+    gl.uniform1f(gl.getUniformLocation(program,'u_fringe'),clamp01(v.bokehFringe));
+    gl.uniform1f(gl.getUniformLocation(program,'u_enableBokeh'),v.bokehShape==='circle'?1:0);
+
+    gl.clearColor(0,0,0,1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.disable(gl.BLEND);
+    gl.drawArrays(gl.TRIANGLES,0,6);
+    gl.flush();
+
+    const smallOut=offscreen(sw,sh), soctx=smallOut.getContext('2d');
+    soctx.imageSmoothingEnabled=true;
+    if('imageSmoothingQuality' in soctx)soctx.imageSmoothingQuality='high';
+    soctx.drawImage(glCanvas,0,0,sw,sh);
+
+    const out=offscreen(w,h), octx=out.getContext('2d');
+    octx.imageSmoothingEnabled=true;
+    if('imageSmoothingQuality' in octx)octx.imageSmoothingQuality='high';
+    octx.drawImage(smallOut,0,0,sw,sh,0,0,w,h);
+    return out;
+  }
+
   function drawShapePath(c,shape,r){
     if(shape==='hexagon'){
       for(let i=0;i<6;i++){
@@ -1259,7 +1509,7 @@ void main(){
     return (data[idx]*0.2126 + data[idx+1]*0.7152 + data[idx+2]*0.0722)/255;
   }
 
-  function drawBokehElement(ctx,shape,c,radius,alpha,fringePx){
+  function drawBokehElement(ctx,shape,c,radius,alpha,fringePx,ringIntensity=0.5){
     const cr=c.r|0,cg=c.g|0,cb=c.b|0;
     ctx.save();
     ctx.translate(c.x,c.y);
@@ -1269,19 +1519,20 @@ void main(){
     ctx.beginPath();
     drawShapePath(ctx,shape,radius);
     const grad=ctx.createRadialGradient(0,0,0,0,0,radius);
-    grad.addColorStop(0,`rgba(${cr},${cg},${cb},${alpha*0.72})`);
-    grad.addColorStop(.42,`rgba(${cr},${cg},${cb},${alpha*0.43})`);
-    grad.addColorStop(.78,`rgba(${cr},${cg},${cb},${alpha*0.14})`);
+    const edgeStart=Math.max(.58,.78-ringIntensity*.16);
+    grad.addColorStop(0,`rgba(${cr},${cg},${cb},${alpha*.34})`);
+    grad.addColorStop(edgeStart,`rgba(${cr},${cg},${cb},${alpha*.26})`);
+    grad.addColorStop(.93,`rgba(${Math.min(255,cr+24)},${Math.min(255,cg+24)},${Math.min(255,cb+24)},${alpha*(.40+ringIntensity*.32)})`);
     grad.addColorStop(1,`rgba(${cr},${cg},${cb},0)`);
     ctx.fillStyle=grad;
     ctx.fill();
 
     if(fringePx>.05){
-      const edgeAlpha=Math.min(.08,alpha*.10);
+      const edgeAlpha=Math.min(.07,alpha*.09);
       ctx.globalCompositeOperation='screen';
-      ctx.lineWidth=Math.max(.35,radius*.035);
-      ctx.save();ctx.translate(fringePx*.45,-fringePx*.15);ctx.beginPath();drawShapePath(ctx,shape,radius*.96);ctx.strokeStyle=`rgba(${Math.min(255,cr+24)},${cg},${Math.max(0,cb-10)},${edgeAlpha})`;ctx.stroke();ctx.restore();
-      ctx.save();ctx.translate(-fringePx*.45,fringePx*.15);ctx.beginPath();drawShapePath(ctx,shape,radius*.96);ctx.strokeStyle=`rgba(${Math.max(0,cr-10)},${cg},${Math.min(255,cb+24)},${edgeAlpha})`;ctx.stroke();ctx.restore();
+      ctx.lineWidth=Math.max(.35,radius*.028);
+      ctx.save();ctx.translate(fringePx*.4,-fringePx*.12);ctx.beginPath();drawShapePath(ctx,shape,radius*.96);ctx.strokeStyle=`rgba(${Math.min(255,cr+22)},${cg},${Math.max(0,cb-8)},${edgeAlpha})`;ctx.stroke();ctx.restore();
+      ctx.save();ctx.translate(-fringePx*.4,fringePx*.12);ctx.beginPath();drawShapePath(ctx,shape,radius*.96);ctx.strokeStyle=`rgba(${Math.max(0,cr-8)},${cg},${Math.min(255,cb+22)},${edgeAlpha})`;ctx.stroke();ctx.restore();
       ctx.globalCompositeOperation='source-over';
     }
     ctx.restore();
@@ -1289,12 +1540,11 @@ void main(){
 
   function applyBokehShapes(base,source,depthCanvas,backgroundMask,w,h,v,interactive=false){
     if(!base||!source||!depthCanvas||!backgroundMask) return base;
-    if(v.bokehShape==='off'||v.bokehSize<=0||v.bokehIntensity<=0.001) return base;
+    if(v.bokehShape==='off'||v.bokehRadius<=0||v.bokehIntensity<=0.001) return base;
 
     const maxSide=interactive?520:760;
     const srcSmall=makeSmallSource(source,w,h,maxSide);
     const sw=srcSmall.w,sh=srcSmall.h,scale=srcSmall.scale;
-
     const depthSmall=offscreen(sw,sh),dctx=depthSmall.getContext('2d');
     dctx.drawImage(depthCanvas,0,0,depthCanvas.width,depthCanvas.height,0,0,sw,sh);
     const depthData=dctx.getImageData(0,0,sw,sh).data;
@@ -1303,12 +1553,12 @@ void main(){
     const maskData=mctx.getImageData(0,0,sw,sh).data;
     const srcData=srcSmall.canvas.getContext('2d').getImageData(0,0,sw,sh).data;
 
-    const density=clamp01(v.bokehDensity),fringe=clamp01(v.bokehFringe);
-    const step=Math.max(2,Math.round(6-density*3.5));
-    const threshold=Math.max(.58,.76-v.bokehIntensity*.16-density*.05);
-    const focusBand=.018+v.depth*.145;
+    const density=clamp01(v.bokehDensity),fringe=clamp01(v.bokehFringe),ring=clamp01(v.ringIntensity);
+    const step=Math.max(2,Math.round(7-density*4.5));
+    const threshold=0.34+clamp01(v.highlightThreshold)*0.60;
+    const focusBand=.018+v.depth*.12;
     const aperture=apertureStrength(v.aperture);
-    const radiusBase=Math.max(1.5,(1.1+v.bokehSize*.045+v.blur*.055+aperture*.8)*scale);
+    const radiusBase=Math.max(1.5,(1.1+v.bokehRadius*.055+v.blur*.050+aperture*.9)*scale);
     const candidates=[];
 
     for(let y=2;y<sh-2;y+=step){
@@ -1316,30 +1566,30 @@ void main(){
         const p=(y*sw+x)*4;
         const ma=maskData[p+3]/255;if(ma<.14)continue;
         const z=getDepthValueFromData(depthData,p);
-        if(z<=v.focus+focusBand*.08)continue;
-        const coc=smoothstep(focusBand,focusBand+.22,Math.abs(z-v.focus));if(coc<.18)continue;
+        const farDelta=z-(v.focus+focusBand*.18);if(farDelta<=0)continue;
+        const coc=smoothstep(0,.28,farDelta);if(coc<.10)continue;
         const lum=getPixelLuma(srcData,p);if(lum<threshold)continue;
-        const score=(lum-threshold)/Math.max(.001,1-threshold)*(.35+.65*coc)*ma;
-        if(score<.02)continue;
+        const score=((lum-threshold)/Math.max(.001,1-threshold))*(.34+.66*coc)*ma;
+        if(score<.018)continue;
         candidates.push({x,y,coc,score,r:srcData[p],g:srcData[p+1],b:srcData[p+2]});
       }
     }
     if(!candidates.length)return base;
     candidates.sort((a,b)=>b.score-a.score);
-    const selected=candidates.slice(0,interactive?120:420);
+    const selected=candidates.slice(0,interactive?180:680);
     const overlay=offscreen(sw,sh),octx=overlay.getContext('2d');
-    const fringeBase=fringe*(.25+radiusBase*.06);
+    octx.globalCompositeOperation='lighter';
+    const fringeBase=fringe*(.20+radiusBase*.08);
     for(const c of selected){
-      const radius=radiusBase*(.80+c.coc*.55)*(1+c.score*.20);
-      const alpha=Math.min(.30,(.025+v.bokehIntensity*.20)*(.34+c.score*.58));
-      drawBokehElement(octx,v.bokehShape,c,radius,alpha,fringeBase*(.5+c.coc*.5));
+      const radius=radiusBase*(.76+c.coc*.66)*(1+c.score*.22);
+      const alpha=Math.min(.34,(.018+v.bokehIntensity*.22)*(.30+c.score*.70));
+      drawBokehElement(octx,v.bokehShape,c,radius,alpha,fringeBase*(.52+c.coc*.48),ring);
     }
     octx.globalCompositeOperation='destination-in';octx.drawImage(maskSmall,0,0);octx.globalCompositeOperation='source-over';
-
     const out=offscreen(w,h),ctx2=out.getContext('2d');
     ctx2.drawImage(base,0,0);
-    ctx2.globalCompositeOperation='soft-light';
-    ctx2.globalAlpha=Math.min(.38,.08+v.bokehIntensity*.22);
+    ctx2.globalCompositeOperation='screen';
+    ctx2.globalAlpha=Math.min(.50,.11+v.bokehIntensity*.30);
     ctx2.drawImage(overlay,0,0,sw,sh,0,0,w,h);
     ctx2.globalAlpha=1;ctx2.globalCompositeOperation='source-over';
     return out;
@@ -1436,7 +1686,9 @@ void main(){
       focus:+$('focusDepth').value/100,
       depth:+$('depthOfField').value/100,
       bokehShape:$('bokehShape').value,
-      bokehSize:+$('bokehSize').value,
+      bokehRadius:+$('bokehRadius').value,
+      ringIntensity:+$('ringIntensity').value/100,
+      highlightThreshold:+$('highlightThreshold').value/100,
       bokehIntensity:+$('bokehIntensity').value/100,
       bokehDensity:+$('bokehDensity').value/100,
       bokehFringe:+$('bokehFringe').value/100,
@@ -1567,12 +1819,19 @@ void main(){
 
     if($('blurOn').checked){
       const bgMask=mask || buildFallbackBackgroundMask(w,h);
-      const depthOut=applyDepthMapGaussianDefocus(filtered,aiDepthCanvas,bgMask,w,h,v,interactive);
-      if(depthOut) out=depthOut;
-
-      // Shape bokeh remains optional. With natural defaults it stays subtle.
-      if(aiDepthCanvas && v.bokehShape!=='off' && v.bokehIntensity>0.02){
-        out=applyBokehShapes(out,filtered,aiDepthCanvas,bgMask,w,h,v,interactive);
+      if(aiDepthCanvas){
+        const cinematicOut=applyCinematicBokehWebGL(filtered,aiDepthCanvas,bgMask,w,h,v,interactive);
+        if(cinematicOut) out=cinematicOut;
+        else{
+          const depthOut=applyDepthMapGaussianDefocus(filtered,aiDepthCanvas,bgMask,w,h,v,interactive);
+          if(depthOut) out=depthOut;
+        }
+        if(v.bokehShape==='star'||v.bokehShape==='hexagon'){
+          out=applyBokehShapes(out,filtered,aiDepthCanvas,bgMask,w,h,v,interactive);
+        }
+      }else{
+        const depthOut=applyDepthMapGaussianDefocus(filtered,null,bgMask,w,h,v,interactive);
+        if(depthOut) out=depthOut;
       }
     }
 
