@@ -713,40 +713,104 @@ button:disabled{opacity:.55;cursor:not-allowed}
     return out;
   }
 
+  function bilateralSmoothBackgroundMask(maskCanvas,depthCanvas,w,h,edgeSoft=0.5){
+    if(!maskCanvas) return null;
+    const src=offscreen(w,h), sctx=src.getContext('2d');
+    sctx.drawImage(maskCanvas,0,0,w,h);
+    const srcImg=sctx.getImageData(0,0,w,h), sd=srcImg.data;
+
+    let depthData=null;
+    if(depthCanvas){
+      const dc=offscreen(w,h), dctx=dc.getContext('2d');
+      dctx.imageSmoothingEnabled=true;
+      if('imageSmoothingQuality' in dctx) dctx.imageSmoothingQuality='high';
+      dctx.drawImage(depthCanvas,0,0,depthCanvas.width,depthCanvas.height,0,0,w,h);
+      depthData=dctx.getImageData(0,0,w,h).data;
+    }
+
+    const out=offscreen(w,h), octx=out.getContext('2d');
+    const outImg=octx.createImageData(w,h), od=outImg.data;
+    const radius=edgeSoft>=0.68?2:1;
+    const sigmaSpatial=1.05+edgeSoft*1.55;
+    const sigmaAlpha=0.10+edgeSoft*0.22;
+    const sigmaDepth=0.035+edgeSoft*0.090;
+    const twoSigmaSpatial2=2*sigmaSpatial*sigmaSpatial;
+    const twoSigmaAlpha2=2*sigmaAlpha*sigmaAlpha;
+    const twoSigmaDepth2=2*sigmaDepth*sigmaDepth;
+
+    for(let y=0;y<h;y++){
+      for(let x=0;x<w;x++){
+        const idx=(y*w+x)*4;
+        const centerA=sd[idx+3]/255;
+        const centerZ=depthData ? depthData[idx]/255 : 0.5;
+        let sum=0,wsum=0;
+
+        for(let oy=-radius;oy<=radius;oy++){
+          const sy=y+oy;
+          if(sy<0||sy>=h) continue;
+          for(let ox=-radius;ox<=radius;ox++){
+            const sx=x+ox;
+            if(sx<0||sx>=w) continue;
+            const sidx=(sy*w+sx)*4;
+            const sa=sd[sidx+3]/255;
+            const da=sa-centerA;
+            const spatial=(ox*ox+oy*oy);
+            let weight=Math.exp(-(spatial/twoSigmaSpatial2))*Math.exp(-((da*da)/twoSigmaAlpha2));
+            if(depthData){
+              const sz=depthData[sidx]/255;
+              const dz=sz-centerZ;
+              weight*=Math.exp(-((dz*dz)/twoSigmaDepth2));
+            }
+            sum+=sa*weight;
+            wsum+=weight;
+          }
+        }
+
+        let a=wsum>1e-6 ? (sum/wsum) : centerA;
+        if(centerA<0.012 && a<0.045) a=0;
+        if(centerA>0.988 && a>0.955) a=1;
+        od[idx]=255; od[idx+1]=255; od[idx+2]=255; od[idx+3]=Math.round(clamp01(a)*255);
+      }
+    }
+    octx.putImageData(outImg,0,0);
+    return out;
+  }
+
   function buildProtectedBackgroundMask(baseMask,w,h){
     if(!baseMask) return null;
 
     const edgeSoft=Math.max(0,Math.min(1,+$('edgeSoftness').value/100));
 
-    // 背景ぼかし量は保ちつつ、人物境界だけをなだらかにする。
-    let refined=remapBackgroundMaskAlpha(baseMask,w,h,0.34,0.80);
+    let refined=remapBackgroundMaskAlpha(baseMask,w,h,0.32,0.82);
+    refined=bilateralSmoothBackgroundMask(refined,aiDepthCanvas,w,h,edgeSoft);
 
-    // 人物側へ少し保護帯を広げる。髪・耳・装飾へのボケ侵入を抑える。
     const subjectMask=subjectMaskFromBackgroundMask(refined,w,h);
-    const protectGrow=Math.max(1,Math.round(Math.max(w,h)*(0.0015 + edgeSoft*0.0028)));
+    const protectGrow=Math.max(1,Math.round(Math.max(w,h)*(0.0010 + edgeSoft*0.0018)));
     const expandedSubject=expandAlphaMask(subjectMask,w,h,protectGrow);
-    const protectBlur=Math.max(2,Math.round(Math.max(w,h)*(0.0025 + edgeSoft*0.0042)));
-    const protect=offscreen(w,h), pctx=protect.getContext('2d');
-    pctx.filter=`blur(${protectBlur}px)`;
-    pctx.drawImage(expandedSubject,0,0,w,h);
-    pctx.filter='none';
-    const protectImg=pctx.getImageData(0,0,w,h), pd=protectImg.data;
-    const high=0.58-edgeSoft*0.16;
-    for(let i=0;i<pd.length;i+=4){
-      const a=pd[i+3]/255;
-      const na=smoothstep(0.08,high,a);
-      pd[i]=255; pd[i+1]=255; pd[i+2]=255; pd[i+3]=Math.round(na*255);
+    const protectSoft=softenMaskEdge(expandedSubject,w,h,1.4+edgeSoft*4.2);
+
+    const refC=offscreen(w,h), rctx=refC.getContext('2d');
+    rctx.drawImage(refined,0,0,w,h);
+    const refImg=rctx.getImageData(0,0,w,h), rd=refImg.data;
+
+    const pC=offscreen(w,h), pctx=pC.getContext('2d');
+    pctx.drawImage(protectSoft,0,0,w,h);
+    const pImg=pctx.getImageData(0,0,w,h), pd=pImg.data;
+
+    for(let i=0;i<rd.length;i+=4){
+      const bg=rd[i+3]/255;
+      const protect=pd[i+3]/255;
+      const subjectProximity=smoothstep(0.10,0.86-edgeSoft*0.10,protect);
+      const keep=Math.max(0,1-subjectProximity);
+      const gentleBand=smoothstep(0.04,0.58+edgeSoft*0.20,bg);
+      let a=bg*keep + bg*gentleBand*subjectProximity*(0.10+edgeSoft*0.20);
+      if(subjectProximity>0.92 && bg<0.18) a*=0.10;
+      rd[i]=255; rd[i+1]=255; rd[i+2]=255; rd[i+3]=Math.round(clamp01(a)*255);
     }
-    pctx.putImageData(protectImg,0,0);
+    rctx.putImageData(refImg,0,0);
 
-    const cut=offscreen(w,h), cctx=cut.getContext('2d');
-    cctx.drawImage(refined,0,0,w,h);
-    cctx.globalCompositeOperation='destination-out';
-    cctx.drawImage(protect,0,0,w,h);
-    cctx.globalCompositeOperation='source-over';
-
-    refined=softenMaskEdge(cut,w,h,1.2+edgeSoft*2.8);
-    refined=remapBackgroundMaskAlpha(refined,w,h,0.05,0.985);
+    refined=softenMaskEdge(refC,w,h,0.9+edgeSoft*2.0);
+    refined=remapBackgroundMaskAlpha(refined,w,h,0.022,0.972);
     return refined;
   }
 
@@ -805,24 +869,35 @@ button:disabled{opacity:.55;cursor:not-allowed}
       bctx.drawImage(restoreSharpMask,0,0,workW,workH,0,0,w,h);
       bctx.globalCompositeOperation='source-over';
     }
-    let refined=remapBackgroundMaskAlpha(base,w,h,0.30,0.82);
+    let refined=remapBackgroundMaskAlpha(base,w,h,0.28,0.84);
+    refined=bilateralSmoothBackgroundMask(refined,aiDepthCanvas,w,h,edge);
+
     const subject=subjectMaskFromBackgroundMask(refined,w,h);
-    const grow=Math.max(1,Math.round(Math.max(w,h)*(0.0007+edge*0.0015)));
+    const grow=Math.max(1,Math.round(Math.max(w,h)*(0.0006+edge*0.0011)));
     const expanded=expandAlphaMask(subject,w,h,grow);
-    const protect=offscreen(w,h), pctx=protect.getContext('2d');
-    const feather=Math.max(1.2,Math.max(w,h)*(0.0012+edge*0.0023));
-    pctx.filter=`blur(${feather}px)`;
-    pctx.drawImage(expanded,0,0,w,h);
-    pctx.filter='none';
-    const cut=offscreen(w,h), cctx=cut.getContext('2d');
-    cctx.drawImage(refined,0,0,w,h);
-    cctx.globalCompositeOperation='destination-out';
-    cctx.globalAlpha=0.72;
-    cctx.drawImage(protect,0,0,w,h);
-    cctx.globalAlpha=1;
-    cctx.globalCompositeOperation='source-over';
-    refined=softenMaskEdge(cut,w,h,1.1+edge*2.6);
-    refined=remapBackgroundMaskAlpha(refined,w,h,0.035,0.97);
+    const protectSoft=softenMaskEdge(expanded,w,h,1.0+edge*2.8);
+
+    const refC=offscreen(w,h), rctx=refC.getContext('2d');
+    rctx.drawImage(refined,0,0,w,h);
+    const refImg=rctx.getImageData(0,0,w,h), rd=refImg.data;
+    const pC=offscreen(w,h), pctx=pC.getContext('2d');
+    pctx.drawImage(protectSoft,0,0,w,h);
+    const pImg=pctx.getImageData(0,0,w,h), pd=pImg.data;
+
+    for(let i=0;i<rd.length;i+=4){
+      const bg=rd[i+3]/255;
+      const protect=pd[i+3]/255;
+      const subjectProximity=smoothstep(0.12,0.82-edge*0.08,protect);
+      const keep=Math.max(0,1-subjectProximity);
+      const edgeBlend=smoothstep(0.03,0.52+edge*0.16,bg);
+      let a=bg*keep + bg*edgeBlend*subjectProximity*(0.08+edge*0.16);
+      if(subjectProximity>0.94 && bg<0.15) a*=0.08;
+      rd[i]=255; rd[i+1]=255; rd[i+2]=255; rd[i+3]=Math.round(clamp01(a)*255);
+    }
+    rctx.putImageData(refImg,0,0);
+
+    refined=softenMaskEdge(refC,w,h,0.85+edge*1.6);
+    refined=remapBackgroundMaskAlpha(refined,w,h,0.02,0.972);
     lensMaskCache.set(cacheKey,refined);
     return refined;
   }
@@ -1273,6 +1348,7 @@ uniform float u_aperture;
 uniform float u_density;
 uniform float u_fringe;
 uniform float u_enableBokeh;
+uniform float u_edgeSoft;
 in vec2 v_uv;
 out vec4 outColor;
 
@@ -1295,12 +1371,46 @@ const vec2 OFF[N]=vec2[N](
 float luma(vec3 c){return dot(c,vec3(0.2126,0.7152,0.0722));}
 float sat01(float x){return clamp(x,0.0,1.0);}
 
+float filteredMask(vec2 uv,float refZ){
+  vec2 ox=vec2(u_texel.x,0.0);
+  vec2 oy=vec2(0.0,u_texel.y);
+  float sum=0.0;
+  float wsum=0.0;
+
+  float m0=texture(u_mask,uv).a;
+  sum+=m0*0.34;
+  wsum+=0.34;
+
+  vec2 uv1=clamp(uv+ox,vec2(0.001),vec2(0.999));
+  float z1=texture(u_depth,uv1).r;
+  float w1=0.165*(1.0-smoothstep(0.015,0.11+u_edgeSoft*0.05,abs(z1-refZ)));
+  sum+=texture(u_mask,uv1).a*w1; wsum+=w1;
+
+  vec2 uv2=clamp(uv-ox,vec2(0.001),vec2(0.999));
+  float z2=texture(u_depth,uv2).r;
+  float w2=0.165*(1.0-smoothstep(0.015,0.11+u_edgeSoft*0.05,abs(z2-refZ)));
+  sum+=texture(u_mask,uv2).a*w2; wsum+=w2;
+
+  vec2 uv3=clamp(uv+oy,vec2(0.001),vec2(0.999));
+  float z3=texture(u_depth,uv3).r;
+  float w3=0.165*(1.0-smoothstep(0.015,0.11+u_edgeSoft*0.05,abs(z3-refZ)));
+  sum+=texture(u_mask,uv3).a*w3; wsum+=w3;
+
+  vec2 uv4=clamp(uv-oy,vec2(0.001),vec2(0.999));
+  float z4=texture(u_depth,uv4).r;
+  float w4=0.165*(1.0-smoothstep(0.015,0.11+u_edgeSoft*0.05,abs(z4-refZ)));
+  sum+=texture(u_mask,uv4).a*w4; wsum+=w4;
+
+  return sum/max(wsum,0.0001);
+}
+
 void main(){
   vec4 center=texture(u_image,v_uv);
-  float centerMask=texture(u_mask,v_uv).a;
-  if(centerMask<0.012){outColor=center;return;}
-
   float z=texture(u_depth,v_uv).r;
+  float centerMaskRaw=texture(u_mask,v_uv).a;
+  float centerMask=filteredMask(v_uv,z);
+  if(centerMask<0.008 && centerMaskRaw<0.004){outColor=center;return;}
+
   float focusBand=mix(0.012,0.145,u_dof);
   float delta=abs(z-u_focus);
   float coc=smoothstep(focusBand,focusBand+0.28,delta);
@@ -1308,8 +1418,8 @@ void main(){
   float radius=max(0.0,u_radius*u_aperture*coc);
   if(radius<0.20){outColor=center;return;}
 
-  vec3 colorSum=center.rgb*1.20;
-  float weightSum=1.20;
+  vec3 colorSum=center.rgb*(1.08+0.10*(1.0-centerMask));
+  float weightSum=1.08+0.10*(1.0-centerMask);
   vec3 highlightSum=vec3(0.0);
   float highlightWeight=0.0;
 
@@ -1321,14 +1431,15 @@ void main(){
     float radial=length(off);
     vec2 suv=clamp(v_uv+off*u_texel*radius,vec2(0.001),vec2(0.999));
     float sm=texture(u_mask,suv).a;
-    if(sm<0.05) continue;
+    if(sm<0.022) continue;
 
     float sz=texture(u_depth,suv).r;
     float depthDiff=abs(sz-z);
-    float depthCompat=1.0-smoothstep(0.025,0.20,depthDiff);
-    float foregroundGuard=smoothstep(-0.012,0.045,sz-z);
-    float maskWeight=smoothstep(0.05,0.82,sm);
-    float baseWeight=(0.52+0.48*(1.0-radial*0.35))*depthCompat*maskWeight*(0.42+0.58*foregroundGuard);
+    float depthCompat=1.0-smoothstep(0.022,0.18,depthDiff);
+    float foregroundGuard=smoothstep(-0.010,0.050+u_edgeSoft*0.018,sz-z);
+    float maskWeight=smoothstep(0.03,mix(0.86,0.56,u_edgeSoft),sm);
+    float edgeRollOff=1.0-smoothstep(0.86,1.05,radial);
+    float baseWeight=(0.54+0.46*(1.0-radial*0.33))*depthCompat*maskWeight*(0.40+0.60*foregroundGuard)*(0.86+0.14*edgeRollOff);
 
     vec3 sampleRgb=texture(u_image,suv).rgb;
     colorSum+=sampleRgb*baseWeight;
@@ -1337,9 +1448,9 @@ void main(){
     if(u_enableBokeh>0.5){
       float lum=luma(sampleRgb);
       float hi=smoothstep(u_threshold,min(1.0,u_threshold+0.18),lum);
-      float ring=smoothstep(0.54,0.98,radial);
-      float ringWeight=mix(0.30+0.70*(1.0-radial*0.24),0.16+1.55*ring,u_ring);
-      float farOnly=smoothstep(u_focus+focusBand*0.18,u_focus+focusBand+0.24,sz);
+      float ring=smoothstep(0.56,0.99,radial);
+      float ringWeight=mix(0.32+0.68*(1.0-radial*0.22),0.18+1.48*ring,u_ring);
+      float farOnly=smoothstep(u_focus+focusBand*0.15,u_focus+focusBand+0.24,sz);
       float hw=hi*ringWeight*depthCompat*maskWeight*farOnly;
 
       if(u_fringe>0.001){
@@ -1357,14 +1468,18 @@ void main(){
   }
 
   vec3 defocused=colorSum/max(weightSum,0.0001);
-  float edgeGuard=smoothstep(0.04,0.88,centerMask);
-  float defocusMix=sat01(coc*edgeGuard*(0.78+0.22*u_aperture));
+  float edgeStart=mix(0.10,0.015,u_edgeSoft);
+  float edgeEnd=mix(0.90,0.58,u_edgeSoft);
+  float edgeGuard=smoothstep(edgeStart,edgeEnd,centerMask);
+  float edgeBand=smoothstep(edgeStart*0.5,0.40+u_edgeSoft*0.20,centerMask)*(1.0-smoothstep(0.56,0.97,centerMask));
+  float boundaryLift=edgeBand*(0.10+u_edgeSoft*0.28);
+  float defocusMix=sat01(coc*min(1.0,edgeGuard*(0.76+0.22*u_aperture)+boundaryLift));
   vec3 result=mix(center.rgb,defocused,defocusMix);
 
   if(u_enableBokeh>0.5 && highlightWeight>0.0001){
     vec3 highlight=highlightSum/max(highlightWeight,1.0);
-    float overlap=min(2.6,highlightWeight/5.0);
-    vec3 add=highlight*(u_intensity*(0.24+overlap*0.26))*coc*edgeGuard;
+    float overlap=min(2.8,highlightWeight/4.6);
+    vec3 add=highlight*(u_intensity*(0.22+overlap*0.24))*coc*max(edgeGuard,boundaryLift*1.3);
     result=vec3(1.0)-((vec3(1.0)-result)*exp(-add*1.65));
   }
 
@@ -1461,6 +1576,7 @@ void main(){
     gl.uniform1f(gl.getUniformLocation(program,'u_aperture'),0.55+apertureStrength(v.aperture)*0.95);
     gl.uniform1f(gl.getUniformLocation(program,'u_density'),clamp01(v.bokehDensity));
     gl.uniform1f(gl.getUniformLocation(program,'u_fringe'),clamp01(v.bokehFringe));
+    gl.uniform1f(gl.getUniformLocation(program,'u_edgeSoft'),clamp01(v.edgeSoftness));
     gl.uniform1f(gl.getUniformLocation(program,'u_enableBokeh'),v.bokehShape==='circle'?1:0);
 
     gl.clearColor(0,0,0,1);
@@ -1692,6 +1808,7 @@ void main(){
       bokehIntensity:+$('bokehIntensity').value/100,
       bokehDensity:+$('bokehDensity').value/100,
       bokehFringe:+$('bokehFringe').value/100,
+      edgeSoftness:+$('edgeSoftness').value/100,
       subjectPop:effective.subjectPop
     };
   }
