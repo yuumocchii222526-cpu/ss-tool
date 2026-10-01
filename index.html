@@ -104,6 +104,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .group-toggle-title{font-size:17px;letter-spacing:.01em;color:var(--text-strong);font-weight:750;display:flex;align-items:center;gap:8px}
 .group-toggle-title::before{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:10px;background:linear-gradient(135deg,#dff2ff,#bee3ff);color:#2278bc;font-size:15px;box-shadow:inset 0 0 0 1px rgba(95,169,229,.2)}
 #blurGroup .group-toggle-title::before{content:"✺"}
+#dollGroup .group-toggle-title::before{content:"✧"}
 #filterGroup .group-toggle-title::before{content:"◉"}
 #saveGroup .group-toggle-title::before{content:"⇩"}
 .group-toggle-sub{font-size:11px;color:var(--dim);padding-left:36px}
@@ -201,8 +202,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
       <div class="row"><span>被写界深度</span><input id="depthOfField" type="range" min="0" max="100" value="42"><output id="depthOfFieldOut">42</output></div>
       <div class="row"><span>境界なめらかさ</span><input id="edgeSoftness" type="range" min="0" max="100" value="48"><output id="edgeSoftnessOut">48</output></div>
       <div class="row"><span>ボケの最大半径</span><input id="bokehRadius" type="range" min="0" max="100" value="34"><output id="bokehRadiusOut">34</output></div>
-      <div class="row"><span>フチの強調度</span><input id="ringIntensity" type="range" min="0" max="100" value="42"><output id="ringIntensityOut">42</output></div>
-      <div class="row"><span>中心の透け感</span><input id="bokehCenterHollow" type="range" min="0" max="100" value="34"><output id="bokehCenterHollowOut">34</output></div>
+      <div class="row"><span>フチの強調度</span><input id="ringIntensity" type="range" min="0" max="100" value="56"><output id="ringIntensityOut">56</output></div>
       <div class="row"><span>輝度しきい値</span><input id="highlightThreshold" type="range" min="0" max="100" value="68"><output id="highlightThresholdOut">68</output></div>
       <div class="row"><span>ボケの明るさ</span><input id="bokehIntensity" type="range" min="0" max="100" value="38"><output id="bokehIntensityOut">38</output></div>
       <div class="row"><span>ボケ密度</span><input id="bokehDensity" type="range" min="0" max="100" value="78"><output id="bokehDensityOut">78</output></div>
@@ -227,6 +227,20 @@ button:disabled{opacity:.55;cursor:not-allowed}
       <button class="btn secondary" type="button" id="clearCorrection" style="margin-top:8px;">補正をリセット</button>
       <p class="mini" style="margin-top:10px;">自動判定で腕・耳・髪・装飾などがぼけた時は「鮮明に戻す」でその部分をなぞってください。背景側を追加でぼかしたい時は「ぼかしを足す」を使えます。</p>
       <div class="badge"><span class="dot loading" id="segDot"></span><span id="segStatus">人物判定の準備中</span></div>
+      </div>
+    </div>
+
+    <div class="group collapsible open" id="dollGroup">
+      <button class="group-toggle" type="button" data-group-toggle aria-expanded="true" aria-controls="dollGroupBody">
+        <span class="group-toggle-main"><span class="group-toggle-title">ドール質感</span><span class="group-toggle-sub">人物だけを滑らかに / 目・服のエッジを保護</span></span>
+        <span class="group-chevron">⌃</span>
+      </button>
+      <div class="group-body" id="dollGroupBody">
+        <p class="mini">人物判定マスクを使い、キャラクター部分だけに軽量なバイラテラル／Surface Blurをかけます。肌や髪の細かなざらつき・ジャギをなめらかにしつつ、目・まつ毛・服・装飾など色差の大きい輪郭はできるだけ残します。</p>
+        <label class="check"><input type="checkbox" id="dollOn" checked> ドール質感を使う</label>
+        <div class="row"><span>なめらかさ</span><input id="dollSmoothness" type="range" min="0" max="100" value="45"><output id="dollSmoothnessOut">45</output></div>
+        <div class="row"><span>エッジ保護</span><input id="dollEdgeProtect" type="range" min="0" max="100" value="70"><output id="dollEdgeProtectOut">70</output></div>
+        <p class="mini" style="margin-top:6px;">なめらかさを上げるほど陶器のような質感が強くなります。エッジ保護を上げるほど、目・髪の境目・服の線などを元画像に近いシャープさで残します。人物判定がまだ終わっていない間は、この処理だけ自動的に待機します。</p>
       </div>
     </div>
 
@@ -307,7 +321,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
   const processingOverlay=$('processingOverlay'), overlayText=$('overlayText'), overlaySub=$('overlaySub');
   const stickySavebar=$('stickySavebar'), btnSaveSticky=$('btnSaveSticky'), btnShareSticky=$('btnShareSticky');
   const toastEl=$('toast'), toastText=$('toastText');
-  const sliderIds=['apertureF','blurStrength','focusDepth','depthOfField','edgeSoftness','bokehRadius','ringIntensity','bokehCenterHollow','highlightThreshold','bokehIntensity','bokehDensity','bokehFringe','brushSize','filterStrength','bright','sat','contrast','warmth','glow','subjectPop','copyrightOffsetX','copyrightOffsetY','copyrightScale','copyrightOpacity'];
+  const sliderIds=['apertureF','blurStrength','focusDepth','depthOfField','edgeSoftness','bokehRadius','ringIntensity','highlightThreshold','bokehIntensity','bokehDensity','bokehFringe','dollSmoothness','dollEdgeProtect','brushSize','filterStrength','bright','sat','contrast','warmth','glow','subjectPop','copyrightOffsetX','copyrightOffsetY','copyrightScale','copyrightOpacity'];
   sliderIds.forEach(id=>{const el=$(id), out=$(id+'Out'); out.textContent=el.value; el.addEventListener('input',()=>out.textContent=el.value);});
 
   let fullImg=null, fullW=0, fullH=0, workW=0, workH=0, srcCanvas=null;
@@ -352,6 +366,11 @@ button:disabled{opacity:.55;cursor:not-allowed}
   const PREVIEW_MAX_SIDE=720;
 
   let previewSourceCache=null;
+  let imageRevision=0;
+  let dollTextureCacheKey='';
+  let dollTextureCacheCanvas=null;
+  let dollSubjectMaskCacheKey='';
+  let dollSubjectMaskCacheCanvas=null;
   let maskRevision=0;
   const effectiveMaskCache=new Map();
   const lensMaskCache=new Map();
@@ -593,7 +612,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
     depthMaskCacheValue=null;
     depthLayerCacheKey='';
     depthLayerCacheValue=null;
-  }
+  dollTextureCacheKey='';dollTextureCacheCanvas=null;dollSubjectMaskCacheKey='';dollSubjectMaskCacheCanvas=null;}
 
   function getPreviewSize(){
     const maxSide=Math.max(workW,workH);
@@ -669,6 +688,8 @@ button:disabled{opacity:.55;cursor:not-allowed}
 
       addBlurMask=offscreen(workW,workH);
       restoreSharpMask=offscreen(workW,workH);
+      dollTextureCacheKey='';dollTextureCacheCanvas=null;
+      dollSubjectMaskCacheKey='';dollSubjectMaskCacheCanvas=null;
       maskPaintCanvas.width=workW;maskPaintCanvas.height=workH;
       maskPaintCtx.clearRect(0,0,workW,workH);
       bumpMaskRevision();
@@ -1342,7 +1363,6 @@ uniform float u_focus;
 uniform float u_dof;
 uniform float u_radius;
 uniform float u_ring;
-uniform float u_centerHollow;
 uniform float u_threshold;
 uniform float u_intensity;
 uniform float u_aperture;
@@ -1448,23 +1468,9 @@ void main(){
 
     if(u_enableBokeh>0.5){
       float lum=luma(sampleRgb);
-      float hi=smoothstep(u_threshold,min(1.0,u_threshold+0.16),lum);
-
-      // Optical disc profile: filled center -> subtle hollow center -> soft bright rim.
-      float centerZone=1.0-smoothstep(0.18,0.70,radial);
-      float midBody=1.0-smoothstep(0.52,1.04,radial);
-      float ringBand=smoothstep(0.58,0.82,radial)*(1.0-smoothstep(0.94,1.06,radial));
-
-      // Step 1: keep the rim visible without making it look cut-out.
-      float baseRingWeight=0.88-radial*0.22;
-      float ringLift=u_ring*(ringBand*0.95);
-
-      // Step 2: gradually reduce only the center energy. 0 = filled lens bokeh, 1 = bubble-like hollow center.
-      float centerReduction=centerZone*u_centerHollow*0.52;
-      float bodySupport=midBody*(0.08+0.10*(1.0-u_centerHollow));
-      float ringWeight=baseRingWeight+ringLift+bodySupport-centerReduction;
-      ringWeight=clamp(ringWeight,0.14,1.45);
-
+      float hi=smoothstep(u_threshold,min(1.0,u_threshold+0.18),lum);
+      float ring=smoothstep(0.56,0.99,radial);
+      float ringWeight=mix(0.32+0.68*(1.0-radial*0.22),0.18+1.48*ring,u_ring);
       float farOnly=smoothstep(u_focus+focusBand*0.15,u_focus+focusBand+0.24,sz);
       float hw=hi*ringWeight*depthCompat*maskWeight*farOnly;
 
@@ -1494,8 +1500,8 @@ void main(){
   if(u_enableBokeh>0.5 && highlightWeight>0.0001){
     vec3 highlight=highlightSum/max(highlightWeight,1.0);
     float overlap=min(2.8,highlightWeight/4.6);
-    vec3 add=highlight*(u_intensity*(0.18+overlap*0.20))*coc*max(edgeGuard,boundaryLift*1.22);
-    result=vec3(1.0)-((vec3(1.0)-result)*exp(-add*1.42));
+    vec3 add=highlight*(u_intensity*(0.22+overlap*0.24))*coc*max(edgeGuard,boundaryLift*1.3);
+    result=vec3(1.0)-((vec3(1.0)-result)*exp(-add*1.65));
   }
 
   outColor=vec4(clamp(result,0.0,1.0),1.0);
@@ -1586,7 +1592,6 @@ void main(){
     gl.uniform1f(gl.getUniformLocation(program,'u_dof'),clamp01(v.depth));
     gl.uniform1f(gl.getUniformLocation(program,'u_radius'),Math.max(0.5,(v.blur*0.46+v.bokehRadius*0.26)*scale));
     gl.uniform1f(gl.getUniformLocation(program,'u_ring'),clamp01(v.ringIntensity));
-    gl.uniform1f(gl.getUniformLocation(program,'u_centerHollow'),clamp01(v.bokehCenterHollow));
     gl.uniform1f(gl.getUniformLocation(program,'u_threshold'),0.34+clamp01(v.highlightThreshold)*0.60);
     gl.uniform1f(gl.getUniformLocation(program,'u_intensity'),clamp01(v.bokehIntensity));
     gl.uniform1f(gl.getUniformLocation(program,'u_aperture'),0.55+apertureStrength(v.aperture)*0.95);
@@ -1705,12 +1710,13 @@ void main(){
       depth:+$('depthOfField').value/100,
       bokehRadius:+$('bokehRadius').value,
       ringIntensity:+$('ringIntensity').value/100,
-      bokehCenterHollow:+$('bokehCenterHollow').value/100,
       highlightThreshold:+$('highlightThreshold').value/100,
       bokehIntensity:+$('bokehIntensity').value/100,
       bokehDensity:+$('bokehDensity').value/100,
       bokehFringe:+$('bokehFringe').value/100,
       edgeSoftness:+$('edgeSoftness').value/100,
+      dollSmoothness:+$('dollSmoothness').value/100,
+      dollEdgeProtect:+$('dollEdgeProtect').value/100,
       subjectPop:effective.subjectPop
     };
   }
@@ -1802,6 +1808,166 @@ void main(){
     return out;
   }
 
+  function buildDollSubjectMask(w,h){
+    if(!autoBackgroundMask) return null;
+    const key=`${imageRevision}:${maskRevision}:${w}x${h}`;
+    if(dollSubjectMaskCacheKey===key && dollSubjectMaskCacheCanvas) return dollSubjectMaskCacheCanvas;
+
+    const bg=offscreen(w,h), bctx=bg.getContext('2d');
+    bctx.imageSmoothingEnabled=true;
+    if('imageSmoothingQuality' in bctx) bctx.imageSmoothingQuality='high';
+    bctx.drawImage(autoBackgroundMask,0,0,workW,workH,0,0,w,h);
+
+    let refined=remapBackgroundMaskAlpha(bg,w,h,0.30,0.82);
+    refined=bilateralSmoothBackgroundMask(refined,aiDepthCanvas,w,h,0.42);
+    let subject=subjectMaskFromBackgroundMask(refined,w,h);
+    subject=softenMaskEdge(subject,w,h,0.65);
+
+    dollSubjectMaskCacheKey=key;
+    dollSubjectMaskCacheCanvas=subject;
+    return subject;
+  }
+
+  function getDollTextureCacheKey(w,h,v,interactive){
+    return [
+      imageRevision,maskRevision,w,h,interactive?1:0,currentPreset,
+      $('filterStrength').value,$('bright').value,$('sat').value,$('contrast').value,
+      $('warmth').value,$('glow').value,$('dollSmoothness').value,$('dollEdgeProtect').value
+    ].join(':');
+  }
+
+  function applyBilateralSurfaceBlurToSubject(source,w,h,subjectMask,v,interactive=false){
+    if(!source||!subjectMask) return source;
+
+    const smooth=clamp01(v.dollSmoothness);
+    const protect=clamp01(v.dollEdgeProtect);
+    if(smooth<=0.001) return source;
+
+    const radius=Math.max(1,Math.min(5,1+Math.round(smooth*4)));
+    const tolerance=Math.max(12,55-protect*43);
+    const toleranceSq=tolerance*tolerance;
+    const blendBase=0.24+smooth*0.68;
+
+    const srcC=offscreen(w,h), sctx=srcC.getContext('2d',{willReadFrequently:true});
+    sctx.drawImage(source,0,0,w,h);
+    const srcImg=sctx.getImageData(0,0,w,h), src=srcImg.data;
+
+    const maskC=offscreen(w,h), mctx=maskC.getContext('2d',{willReadFrequently:true});
+    mctx.drawImage(subjectMask,0,0,w,h);
+    const maskData=mctx.getImageData(0,0,w,h).data;
+
+    const outC=offscreen(w,h), octx=outC.getContext('2d',{willReadFrequently:true});
+    const dstImg=octx.createImageData(w,h), dst=dstImg.data;
+    dst.set(src);
+
+    let minX=w,minY=h,maxX=-1,maxY=-1;
+    for(let y=0;y<h;y++){
+      const row=y*w*4;
+      for(let x=0;x<w;x++){
+        if(maskData[row+x*4+3]>10){
+          if(x<minX)minX=x;if(x>maxX)maxX=x;if(y<minY)minY=y;if(y>maxY)maxY=y;
+        }
+      }
+    }
+    if(maxX<minX||maxY<minY){octx.putImageData(dstImg,0,0);return outC;}
+
+    minX=Math.max(0,minX-radius);minY=Math.max(0,minY-radius);
+    maxX=Math.min(w-1,maxX+radius);maxY=Math.min(h-1,maxY+radius);
+
+    const offsets=[];
+    const sigma=Math.max(1,radius*0.78);
+    const invSpatial=1/(2*sigma*sigma);
+    for(let dy=-radius;dy<=radius;dy++){
+      for(let dx=-radius;dx<=radius;dx++){
+        const d2=dx*dx+dy*dy;
+        if(d2>radius*radius) continue;
+        offsets.push([dx,dy,Math.exp(-d2*invSpatial)]);
+      }
+    }
+
+    const edgeLow=0.035+(1-protect)*0.045;
+    const edgeHigh=0.11+(1-protect)*0.12;
+
+    for(let y=minY;y<=maxY;y++){
+      for(let x=minX;x<=maxX;x++){
+        const idx=(y*w+x)*4;
+        const ma=maskData[idx+3]/255;
+        if(ma<0.025) continue;
+
+        const cr=src[idx],cg=src[idx+1],cb=src[idx+2];
+        const xl=Math.max(0,x-1), xr=Math.min(w-1,x+1);
+        const yu=Math.max(0,y-1), yd=Math.min(h-1,y+1);
+        const il=(y*w+xl)*4, ir=(y*w+xr)*4, iu=(yu*w+x)*4, id=(yd*w+x)*4;
+        const edgeL1=(
+          Math.abs(src[ir]-src[il])+Math.abs(src[ir+1]-src[il+1])+Math.abs(src[ir+2]-src[il+2])+
+          Math.abs(src[id]-src[iu])+Math.abs(src[id+1]-src[iu+1])+Math.abs(src[id+2]-src[iu+2])
+        )/(255*6);
+        const edgeGate=1-smoothstep(edgeLow,edgeHigh,edgeL1);
+        const mixAmt=blendBase*ma*(0.18+0.82*edgeGate);
+        if(mixAmt<0.015) continue;
+
+        let sumR=0,sumG=0,sumB=0,sumW=0;
+        for(let k=0;k<offsets.length;k++){
+          const ox=offsets[k][0],oy=offsets[k][1];
+          const sx=x+ox,sy=y+oy;
+          if(sx<0||sx>=w||sy<0||sy>=h) continue;
+          const si=(sy*w+sx)*4;
+          const sma=maskData[si+3]/255;
+          if(sma<0.02) continue;
+
+          const dr=src[si]-cr,dg=src[si+1]-cg,db=src[si+2]-cb;
+          const colorDistSq=dr*dr+dg*dg+db*db;
+          if(colorDistSq>toleranceSq) continue;
+
+          let cw=1-colorDistSq/toleranceSq;
+          cw*=cw;
+          const weight=offsets[k][2]*cw*(0.22+0.78*sma);
+          sumR+=src[si]*weight;
+          sumG+=src[si+1]*weight;
+          sumB+=src[si+2]*weight;
+          sumW+=weight;
+        }
+
+        if(sumW>0.00001){
+          const br=sumR/sumW,bg=sumG/sumW,bb=sumB/sumW;
+          dst[idx]=Math.round(cr+(br-cr)*mixAmt);
+          dst[idx+1]=Math.round(cg+(bg-cg)*mixAmt);
+          dst[idx+2]=Math.round(cb+(bb-cb)*mixAmt);
+          dst[idx+3]=src[idx+3];
+        }
+      }
+    }
+
+    octx.putImageData(dstImg,0,0);
+    return outC;
+  }
+
+  function applyDollTexture(source,w,h,v,interactive=false){
+    if(!$('dollOn').checked || !autoBackgroundMask || v.dollSmoothness<=0.001) return source;
+    const subjectMask=buildDollSubjectMask(w,h);
+    if(!subjectMask) return source;
+
+    const key=getDollTextureCacheKey(w,h,v,interactive);
+    if(dollTextureCacheKey===key && dollTextureCacheCanvas) return dollTextureCacheCanvas;
+
+    const processed=applyBilateralSurfaceBlurToSubject(source,w,h,subjectMask,v,interactive);
+    const out=offscreen(w,h), octx=out.getContext('2d');
+    octx.imageSmoothingEnabled=true;
+    if('imageSmoothingQuality' in octx) octx.imageSmoothingQuality='high';
+    octx.drawImage(source,0,0,w,h);
+
+    const layer=offscreen(w,h), lctx=layer.getContext('2d');
+    lctx.drawImage(processed,0,0,w,h);
+    lctx.globalCompositeOperation='destination-in';
+    lctx.drawImage(subjectMask,0,0,w,h);
+    lctx.globalCompositeOperation='source-over';
+    octx.drawImage(layer,0,0,w,h);
+
+    dollTextureCacheKey=key;
+    dollTextureCacheCanvas=out;
+    return out;
+  }
+
   function getProcessingBackgroundMask(w,h){
     // Keep one broad, stable background mask for both preview and depth blur.
     // Depth controls blur strength, not whether a pixel is considered background.
@@ -1832,8 +1998,9 @@ void main(){
   }
 
   function composeProcessed(src,w,h,mask,interactive=false){
-    const filtered=applyFilter(src,w,h);
+    let filtered=applyFilter(src,w,h);
     const v=values();
+    filtered=applyDollTexture(filtered,w,h,v,interactive);
     let out=filtered;
 
     if($('blurOn').checked){
@@ -1956,6 +2123,9 @@ void main(){
       painting=false;
       lastPaint=null;
       pickerCard.style.display='none';canvasWrap.style.display='block';panel.style.display='block';viewerTools.style.display='block';stickySavebar.style.display='block';
+      imageRevision++;
+      dollTextureCacheKey='';dollTextureCacheCanvas=null;
+      dollSubjectMaskCacheKey='';dollSubjectMaskCacheCanvas=null;
       autoBackgroundMask=null;segError=null;updateSegUI();
       applyPreset(currentPreset);
       computeAutoBackgroundMask();
@@ -1966,6 +2136,7 @@ void main(){
   $('btnBeforeStage').addEventListener('click',()=>{showAfter=false;updateViewButtons();requestRender('full');});
   $('btnAfterStage').addEventListener('click',()=>{showAfter=true;updateViewButtons();requestRender('full');});
   $('blurOn').addEventListener('change',()=>{showAfter=true;updateViewButtons();requestRender('full');});
+  $('dollOn').addEventListener('change',()=>{showAfter=true;updateViewButtons();dollTextureCacheKey='';dollTextureCacheCanvas=null;requestRender('full');});
   const visualControlIds=new Set(sliderIds);
   function ensureAfterViewForAdjustment(id){
     if(!showAfter){showAfter=true;updateViewButtons();}
