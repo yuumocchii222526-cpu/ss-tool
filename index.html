@@ -200,14 +200,13 @@ button:disabled{opacity:.55;cursor:not-allowed}
       <div class="row"><span>焦点深度</span><input id="focusDepth" type="range" min="0" max="100" value="35"><output id="focusDepthOut">35</output></div>
       <div class="row"><span>被写界深度</span><input id="depthOfField" type="range" min="0" max="100" value="42"><output id="depthOfFieldOut">42</output></div>
       <div class="row"><span>境界なめらかさ</span><input id="edgeSoftness" type="range" min="0" max="100" value="48"><output id="edgeSoftnessOut">48</output></div>
-      <div class="row" style="align-items:flex-start;"><span style="padding-top:10px;">ボケ形状</span><select id="bokehShape" aria-label="ボケ形状"><option value="circle" selected>円形（Cinematic Bubble）</option><option value="star">星型</option><option value="hexagon">六角形</option><option value="off">玉ボケなし</option></select></div>
       <div class="row"><span>ボケの最大半径</span><input id="bokehRadius" type="range" min="0" max="100" value="34"><output id="bokehRadiusOut">34</output></div>
       <div class="row"><span>フチの強調度</span><input id="ringIntensity" type="range" min="0" max="100" value="56"><output id="ringIntensityOut">56</output></div>
       <div class="row"><span>輝度しきい値</span><input id="highlightThreshold" type="range" min="0" max="100" value="68"><output id="highlightThresholdOut">68</output></div>
       <div class="row"><span>ボケの明るさ</span><input id="bokehIntensity" type="range" min="0" max="100" value="38"><output id="bokehIntensityOut">38</output></div>
       <div class="row"><span>ボケ密度</span><input id="bokehDensity" type="range" min="0" max="100" value="78"><output id="bokehDensityOut">78</output></div>
       <div class="row"><span>色にじみ</span><input id="bokehFringe" type="range" min="0" max="100" value="8"><output id="bokehFringeOut">8</output></div>
-      <p class="mini" style="margin-top:6px;">円形は48サンプルの多重リング型デフォーカスを使い、明るい背景だけ外周が少し強くなるバブルボケとして描画します。輝度しきい値を上げるほど強い光源だけが玉ボケになります。人物境界では深度差と背景マスクを使ってサンプルを抑え、髪・耳・輪郭への色滲みを防ぎます。</p>
+      <p class="mini" style="margin-top:6px;">玉ボケは円形（Cinematic Bubble）に固定し、48サンプルの多重リング型デフォーカスで描画します。明るい背景だけ外周が少し強くなるバブルボケになり、輝度しきい値を上げるほど強い光源だけが玉ボケになります。人物境界では深度差と背景マスクを使ってサンプルを抑え、髪・耳・輪郭への色滲みを防ぎます。</p>
       <div class="small-actions" style="margin-top:8px;">
         <button type="button" id="focusSubjectBtn">人物にピント</button>
         <button type="button" id="toggleDepthPreview">深度マップを見る</button>
@@ -293,7 +292,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
 </div>
 <div class="toast info" id="toast" aria-live="polite" aria-atomic="true"><div class="toast-inner" id="toastText"></div></div>
 <input type="file" id="fileInput" class="fileInput" accept="image/*,.heic,.heif,image/heic,image/heif">
-<p class="footer-note">※ 人物判定は自動処理のため、髪・耳・手先・装飾などで境界が前後する場合があります。その場合は補正ブラシで微調整してください。背景ぼかしは自然寄りになるよう調整しています。</p>
+<p class="footer-note">※ 人物判定は自動処理のため、髪・耳・手先・装飾などで境界が前後する場合があります。その場合は補正ブラシで微調整してください。背景ぼかしは円形のCinematic Bubbleに最適化しています。</p>
 <div class="privacy-note"><strong>プライバシーについて</strong><br>このツールは、加工に使用する画像をサーバーへアップロードせず、お使いのPC・スマホのブラウザ内で処理する設計です。画像データが端末の外へ送信・保存されることはありません。人物判定モデルとAI深度推定モデルの初回読み込み時のみインターネット接続が必要ですが、写真そのものは外部サーバーへアップロードされません。プライバシーに配慮して安心してお使いいただけます。</div>
 </div>
 <script>
@@ -1577,7 +1576,7 @@ void main(){
     gl.uniform1f(gl.getUniformLocation(program,'u_density'),clamp01(v.bokehDensity));
     gl.uniform1f(gl.getUniformLocation(program,'u_fringe'),clamp01(v.bokehFringe));
     gl.uniform1f(gl.getUniformLocation(program,'u_edgeSoft'),clamp01(v.edgeSoftness));
-    gl.uniform1f(gl.getUniformLocation(program,'u_enableBokeh'),v.bokehShape==='circle'?1:0);
+    gl.uniform1f(gl.getUniformLocation(program,'u_enableBokeh'),v.bokehIntensity>0.001&&v.bokehRadius>0?1:0);
 
     gl.clearColor(0,0,0,1);
     gl.clear(gl.COLOR_BUFFER_BIT);
@@ -1594,120 +1593,6 @@ void main(){
     octx.imageSmoothingEnabled=true;
     if('imageSmoothingQuality' in octx)octx.imageSmoothingQuality='high';
     octx.drawImage(smallOut,0,0,sw,sh,0,0,w,h);
-    return out;
-  }
-
-  function drawShapePath(c,shape,r){
-    if(shape==='hexagon'){
-      for(let i=0;i<6;i++){
-        const a=(-Math.PI/2)+(Math.PI*2*i/6);
-        const x=Math.cos(a)*r, y=Math.sin(a)*r;
-        if(i===0) c.moveTo(x,y); else c.lineTo(x,y);
-      }
-      c.closePath();
-      return;
-    }
-    if(shape==='star'){
-      const inner=r*0.46;
-      for(let i=0;i<10;i++){
-        const rr=(i%2===0)?r:inner;
-        const a=(-Math.PI/2)+(Math.PI*i/5);
-        const x=Math.cos(a)*rr, y=Math.sin(a)*rr;
-        if(i===0) c.moveTo(x,y); else c.lineTo(x,y);
-      }
-      c.closePath();
-      return;
-    }
-    c.arc(0,0,r,0,Math.PI*2);
-  }
-
-  function getPixelLuma(data,idx){
-    return (data[idx]*0.2126 + data[idx+1]*0.7152 + data[idx+2]*0.0722)/255;
-  }
-
-  function drawBokehElement(ctx,shape,c,radius,alpha,fringePx,ringIntensity=0.5){
-    const cr=c.r|0,cg=c.g|0,cb=c.b|0;
-    ctx.save();
-    ctx.translate(c.x,c.y);
-    if(shape==='hexagon') ctx.rotate((c.x*0.013+c.y*0.009)%Math.PI);
-    else if(shape==='star') ctx.rotate((c.x*0.017+c.y*0.011)%Math.PI);
-
-    ctx.beginPath();
-    drawShapePath(ctx,shape,radius);
-    const grad=ctx.createRadialGradient(0,0,0,0,0,radius);
-    const edgeStart=Math.max(.58,.78-ringIntensity*.16);
-    grad.addColorStop(0,`rgba(${cr},${cg},${cb},${alpha*.34})`);
-    grad.addColorStop(edgeStart,`rgba(${cr},${cg},${cb},${alpha*.26})`);
-    grad.addColorStop(.93,`rgba(${Math.min(255,cr+24)},${Math.min(255,cg+24)},${Math.min(255,cb+24)},${alpha*(.40+ringIntensity*.32)})`);
-    grad.addColorStop(1,`rgba(${cr},${cg},${cb},0)`);
-    ctx.fillStyle=grad;
-    ctx.fill();
-
-    if(fringePx>.05){
-      const edgeAlpha=Math.min(.07,alpha*.09);
-      ctx.globalCompositeOperation='screen';
-      ctx.lineWidth=Math.max(.35,radius*.028);
-      ctx.save();ctx.translate(fringePx*.4,-fringePx*.12);ctx.beginPath();drawShapePath(ctx,shape,radius*.96);ctx.strokeStyle=`rgba(${Math.min(255,cr+22)},${cg},${Math.max(0,cb-8)},${edgeAlpha})`;ctx.stroke();ctx.restore();
-      ctx.save();ctx.translate(-fringePx*.4,fringePx*.12);ctx.beginPath();drawShapePath(ctx,shape,radius*.96);ctx.strokeStyle=`rgba(${Math.max(0,cr-8)},${cg},${Math.min(255,cb+22)},${edgeAlpha})`;ctx.stroke();ctx.restore();
-      ctx.globalCompositeOperation='source-over';
-    }
-    ctx.restore();
-  }
-
-  function applyBokehShapes(base,source,depthCanvas,backgroundMask,w,h,v,interactive=false){
-    if(!base||!source||!depthCanvas||!backgroundMask) return base;
-    if(v.bokehShape==='off'||v.bokehRadius<=0||v.bokehIntensity<=0.001) return base;
-
-    const maxSide=interactive?520:760;
-    const srcSmall=makeSmallSource(source,w,h,maxSide);
-    const sw=srcSmall.w,sh=srcSmall.h,scale=srcSmall.scale;
-    const depthSmall=offscreen(sw,sh),dctx=depthSmall.getContext('2d');
-    dctx.drawImage(depthCanvas,0,0,depthCanvas.width,depthCanvas.height,0,0,sw,sh);
-    const depthData=dctx.getImageData(0,0,sw,sh).data;
-    const maskSmall=offscreen(sw,sh),mctx=maskSmall.getContext('2d');
-    mctx.drawImage(backgroundMask,0,0,w,h,0,0,sw,sh);
-    const maskData=mctx.getImageData(0,0,sw,sh).data;
-    const srcData=srcSmall.canvas.getContext('2d').getImageData(0,0,sw,sh).data;
-
-    const density=clamp01(v.bokehDensity),fringe=clamp01(v.bokehFringe),ring=clamp01(v.ringIntensity);
-    const step=Math.max(2,Math.round(7-density*4.5));
-    const threshold=0.34+clamp01(v.highlightThreshold)*0.60;
-    const focusBand=.018+v.depth*.12;
-    const aperture=apertureStrength(v.aperture);
-    const radiusBase=Math.max(1.5,(1.1+v.bokehRadius*.055+v.blur*.050+aperture*.9)*scale);
-    const candidates=[];
-
-    for(let y=2;y<sh-2;y+=step){
-      for(let x=2;x<sw-2;x+=step){
-        const p=(y*sw+x)*4;
-        const ma=maskData[p+3]/255;if(ma<.14)continue;
-        const z=getDepthValueFromData(depthData,p);
-        const farDelta=z-(v.focus+focusBand*.18);if(farDelta<=0)continue;
-        const coc=smoothstep(0,.28,farDelta);if(coc<.10)continue;
-        const lum=getPixelLuma(srcData,p);if(lum<threshold)continue;
-        const score=((lum-threshold)/Math.max(.001,1-threshold))*(.34+.66*coc)*ma;
-        if(score<.018)continue;
-        candidates.push({x,y,coc,score,r:srcData[p],g:srcData[p+1],b:srcData[p+2]});
-      }
-    }
-    if(!candidates.length)return base;
-    candidates.sort((a,b)=>b.score-a.score);
-    const selected=candidates.slice(0,interactive?180:680);
-    const overlay=offscreen(sw,sh),octx=overlay.getContext('2d');
-    octx.globalCompositeOperation='lighter';
-    const fringeBase=fringe*(.20+radiusBase*.08);
-    for(const c of selected){
-      const radius=radiusBase*(.76+c.coc*.66)*(1+c.score*.22);
-      const alpha=Math.min(.34,(.018+v.bokehIntensity*.22)*(.30+c.score*.70));
-      drawBokehElement(octx,v.bokehShape,c,radius,alpha,fringeBase*(.52+c.coc*.48),ring);
-    }
-    octx.globalCompositeOperation='destination-in';octx.drawImage(maskSmall,0,0);octx.globalCompositeOperation='source-over';
-    const out=offscreen(w,h),ctx2=out.getContext('2d');
-    ctx2.drawImage(base,0,0);
-    ctx2.globalCompositeOperation='screen';
-    ctx2.globalAlpha=Math.min(.50,.11+v.bokehIntensity*.30);
-    ctx2.drawImage(overlay,0,0,sw,sh,0,0,w,h);
-    ctx2.globalAlpha=1;ctx2.globalCompositeOperation='source-over';
     return out;
   }
 
@@ -1801,7 +1686,6 @@ void main(){
       blur:+$('blurStrength').value,
       focus:+$('focusDepth').value/100,
       depth:+$('depthOfField').value/100,
-      bokehShape:$('bokehShape').value,
       bokehRadius:+$('bokehRadius').value,
       ringIntensity:+$('ringIntensity').value/100,
       highlightThreshold:+$('highlightThreshold').value/100,
@@ -1943,9 +1827,6 @@ void main(){
           const depthOut=applyDepthMapGaussianDefocus(filtered,aiDepthCanvas,bgMask,w,h,v,interactive);
           if(depthOut) out=depthOut;
         }
-        if(v.bokehShape==='star'||v.bokehShape==='hexagon'){
-          out=applyBokehShapes(out,filtered,aiDepthCanvas,bgMask,w,h,v,interactive);
-        }
       }else{
         const depthOut=applyDepthMapGaussianDefocus(filtered,null,bgMask,w,h,v,interactive);
         if(depthOut) out=depthOut;
@@ -2067,7 +1948,6 @@ void main(){
   $('btnBeforeStage').addEventListener('click',()=>{showAfter=false;updateViewButtons();requestRender('full');});
   $('btnAfterStage').addEventListener('click',()=>{showAfter=true;updateViewButtons();requestRender('full');});
   $('blurOn').addEventListener('change',()=>{showAfter=true;updateViewButtons();requestRender('full');});
-  $('bokehShape').addEventListener('change',()=>{showAfter=true;updateViewButtons();requestRender('full');});
   const visualControlIds=new Set(sliderIds);
   function ensureAfterViewForAdjustment(id){
     if(!showAfter){showAfter=true;updateViewButtons();}
