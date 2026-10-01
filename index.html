@@ -236,11 +236,12 @@ button:disabled{opacity:.55;cursor:not-allowed}
         <span class="group-chevron">⌃</span>
       </button>
       <div class="group-body" id="dollGroupBody">
-        <p class="mini">人物判定マスクを使い、キャラクター部分だけに軽量なバイラテラル／Surface Blurをかけます。肌や髪の細かなざらつき・ジャギをなめらかにしつつ、目・まつ毛・服・装飾など色差の大きい輪郭はできるだけ残します。</p>
+        <p class="mini">人物判定マスクを使い、キャラクター部分だけに軽量なバイラテラル／Surface Blurをかけます。肌や髪の細かなざらつき・ジャギをなめらかにし、その後に強い輪郭だけを選んでアンシャープ処理します。目・眉・輪郭・服の境界はくっきり、髪や肌の表面はなめらかなまま残します。</p>
         <label class="check"><input type="checkbox" id="dollOn" checked> ドール質感を使う</label>
         <div class="row"><span>なめらかさ</span><input id="dollSmoothness" type="range" min="0" max="100" value="45"><output id="dollSmoothnessOut">45</output></div>
         <div class="row"><span>エッジ保護</span><input id="dollEdgeProtect" type="range" min="0" max="100" value="70"><output id="dollEdgeProtectOut">70</output></div>
-        <p class="mini" style="margin-top:6px;">なめらかさを上げるほど陶器のような質感が強くなります。エッジ保護を上げるほど、目・髪の境目・服の線などを元画像に近いシャープさで残します。人物判定がまだ終わっていない間は、この処理だけ自動的に待機します。</p>
+        <div class="row"><span>輪郭のくっきり</span><input id="dollSharpness" type="range" min="0" max="100" value="50"><output id="dollSharpnessOut">50</output></div>
+        <p class="mini" style="margin-top:6px;">なめらかさを上げるほど陶器のような質感が強くなります。エッジ保護は平滑化から目・髪の境目・服の線を守り、「輪郭のくっきり」は平滑化後の強いエッジだけをアンシャープマスクで持ち上げます。滑らかさで変化した部分は自動的にシャープ量を抑え、髪のジャギを戻しにくくしています。</p>
       </div>
     </div>
 
@@ -321,7 +322,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
   const processingOverlay=$('processingOverlay'), overlayText=$('overlayText'), overlaySub=$('overlaySub');
   const stickySavebar=$('stickySavebar'), btnSaveSticky=$('btnSaveSticky'), btnShareSticky=$('btnShareSticky');
   const toastEl=$('toast'), toastText=$('toastText');
-  const sliderIds=['apertureF','blurStrength','focusDepth','depthOfField','edgeSoftness','bokehRadius','ringIntensity','highlightThreshold','bokehIntensity','bokehDensity','bokehFringe','dollSmoothness','dollEdgeProtect','brushSize','filterStrength','bright','sat','contrast','warmth','glow','subjectPop','copyrightOffsetX','copyrightOffsetY','copyrightScale','copyrightOpacity'];
+  const sliderIds=['apertureF','blurStrength','focusDepth','depthOfField','edgeSoftness','bokehRadius','ringIntensity','highlightThreshold','bokehIntensity','bokehDensity','bokehFringe','dollSmoothness','dollEdgeProtect','dollSharpness','brushSize','filterStrength','bright','sat','contrast','warmth','glow','subjectPop','copyrightOffsetX','copyrightOffsetY','copyrightScale','copyrightOpacity'];
   sliderIds.forEach(id=>{const el=$(id), out=$(id+'Out'); out.textContent=el.value; el.addEventListener('input',()=>out.textContent=el.value);});
 
   let fullImg=null, fullW=0, fullH=0, workW=0, workH=0, srcCanvas=null;
@@ -1717,6 +1718,7 @@ void main(){
       edgeSoftness:+$('edgeSoftness').value/100,
       dollSmoothness:+$('dollSmoothness').value/100,
       dollEdgeProtect:+$('dollEdgeProtect').value/100,
+      dollSharpness:+$('dollSharpness').value/100,
       subjectPop:effective.subjectPop
     };
   }
@@ -1832,7 +1834,7 @@ void main(){
     return [
       imageRevision,maskRevision,w,h,interactive?1:0,currentPreset,
       $('filterStrength').value,$('bright').value,$('sat').value,$('contrast').value,
-      $('warmth').value,$('glow').value,$('dollSmoothness').value,$('dollEdgeProtect').value
+      $('warmth').value,$('glow').value,$('dollSmoothness').value,$('dollEdgeProtect').value,$('dollSharpness').value
     ].join(':');
   }
 
@@ -1942,6 +1944,80 @@ void main(){
     return outC;
   }
 
+  function applyDollEdgeAwareUnsharp(originalSource,smoothedSource,w,h,subjectMask,v){
+    if(!originalSource||!smoothedSource||!subjectMask) return smoothedSource;
+    const amount=clamp01(v.dollSharpness);
+    if(amount<=0.001) return smoothedSource;
+
+    const origC=offscreen(w,h), oig=origC.getContext('2d',{willReadFrequently:true});
+    oig.drawImage(originalSource,0,0,w,h);
+    const orig=oig.getImageData(0,0,w,h).data;
+
+    const srcC=offscreen(w,h), sctx=srcC.getContext('2d',{willReadFrequently:true});
+    sctx.drawImage(smoothedSource,0,0,w,h);
+    const srcImg=sctx.getImageData(0,0,w,h), src=srcImg.data;
+
+    const maskC=offscreen(w,h), mctx=maskC.getContext('2d',{willReadFrequently:true});
+    mctx.drawImage(subjectMask,0,0,w,h);
+    const maskData=mctx.getImageData(0,0,w,h).data;
+
+    const outC=offscreen(w,h), outCtx=outC.getContext('2d',{willReadFrequently:true});
+    const dstImg=outCtx.createImageData(w,h), dst=dstImg.data;
+    dst.set(src);
+
+    const lumAt=(data,idx)=>0.2126*data[idx]+0.7152*data[idx+1]+0.0722*data[idx+2];
+    const detailLimit=10+amount*6;
+
+    for(let y=1;y<h-1;y++){
+      for(let x=1;x<w-1;x++){
+        const idx=(y*w+x)*4;
+        const ma=maskData[idx+3]/255;
+        if(ma<0.04) continue;
+
+        const il=(y*w+(x-1))*4, ir=(y*w+(x+1))*4;
+        const iu=((y-1)*w+x)*4, id=((y+1)*w+x)*4;
+        const iul=((y-1)*w+(x-1))*4, iur=((y-1)*w+(x+1))*4;
+        const idl=((y+1)*w+(x-1))*4, idr=((y+1)*w+(x+1))*4;
+
+        const lc=lumAt(src,idx);
+        const ll=lumAt(src,il), lr=lumAt(src,ir);
+        const lu=lumAt(src,iu), ld=lumAt(src,id);
+        const lul=lumAt(src,iul), lur=lumAt(src,iur);
+        const ldl=lumAt(src,idl), ldr=lumAt(src,idr);
+
+        // 強い輪郭だけを拾う。sqrtを使わないL1勾配でスマホ負荷を抑える。
+        const grad=(Math.abs(lr-ll)+Math.abs(ld-lu))/(255*2);
+        const edgeMask=smoothstep(0.055,0.19,grad);
+        if(edgeMask<=0.002) continue;
+
+        // 3x3の軽量ガウス近似。中心4、上下左右1、斜め0.5。
+        const blurLum=(lc*4 + ll+lr+lu+ld + (lul+lur+ldl+ldr)*0.5)/10;
+        let detail=lc-blurLum;
+        if(detail>detailLimit) detail=detailLimit;
+        else if(detail<-detailLimit) detail=-detailLimit;
+
+        // バイラテラルで大きく変えた場所は、ジャギや表面ノイズを戻さないためシャープを抑える。
+        const smoothDelta=(
+          Math.abs(orig[idx]-src[idx])+
+          Math.abs(orig[idx+1]-src[idx+1])+
+          Math.abs(orig[idx+2]-src[idx+2])
+        )/(255*3);
+        const retainGate=1-smoothstep(0.018,0.095,smoothDelta);
+
+        const gain=amount*1.35*edgeMask*retainGate*ma;
+        if(gain<=0.002) continue;
+
+        dst[idx]=clamp255(src[idx]+detail*gain);
+        dst[idx+1]=clamp255(src[idx+1]+detail*gain);
+        dst[idx+2]=clamp255(src[idx+2]+detail*gain);
+        dst[idx+3]=src[idx+3];
+      }
+    }
+
+    outCtx.putImageData(dstImg,0,0);
+    return outC;
+  }
+
   function applyDollTexture(source,w,h,v,interactive=false){
     if(!$('dollOn').checked || !autoBackgroundMask || v.dollSmoothness<=0.001) return source;
     const subjectMask=buildDollSubjectMask(w,h);
@@ -1950,7 +2026,8 @@ void main(){
     const key=getDollTextureCacheKey(w,h,v,interactive);
     if(dollTextureCacheKey===key && dollTextureCacheCanvas) return dollTextureCacheCanvas;
 
-    const processed=applyBilateralSurfaceBlurToSubject(source,w,h,subjectMask,v,interactive);
+    const smoothed=applyBilateralSurfaceBlurToSubject(source,w,h,subjectMask,v,interactive);
+    const processed=applyDollEdgeAwareUnsharp(source,smoothed,w,h,subjectMask,v);
     const out=offscreen(w,h), octx=out.getContext('2d');
     octx.imageSmoothingEnabled=true;
     if('imageSmoothingQuality' in octx) octx.imageSmoothingQuality='high';
