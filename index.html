@@ -232,16 +232,15 @@ button:disabled{opacity:.55;cursor:not-allowed}
 
     <div class="group collapsible open" id="dollGroup">
       <button class="group-toggle" type="button" data-group-toggle aria-expanded="true" aria-controls="dollGroupBody">
-        <span class="group-toggle-main"><span class="group-toggle-title">ドール質感</span><span class="group-toggle-sub">人物だけを滑らかに / 目・服のエッジを保護</span></span>
+        <span class="group-toggle-main"><span class="group-toggle-title">ドール質感</span><span class="group-toggle-sub">高速レイヤー合成 / ツルッと・くっきり・ふんわり光</span></span>
         <span class="group-chevron">⌃</span>
       </button>
       <div class="group-body" id="dollGroupBody">
-        <p class="mini">人物判定マスクを使い、キャラクター部分だけに軽量なバイラテラル／Surface Blurをかけます。肌や髪の細かなざらつき・ジャギをなめらかにし、その後に強い輪郭だけを選んでアンシャープ処理します。目・眉・輪郭・服の境界はくっきり、髪や肌の表面はなめらかなまま残します。</p>
+        <p class="mini">ImageDataの1ピクセル処理は使わず、Canvasのfilterとレイヤー合成で描画します。ごく弱いぼかし＋コントラストで表面を整え、原画のディテールを重ねて解像感を残し、screen合成のブルームでハイライトを柔らかく広げます。</p>
         <label class="check"><input type="checkbox" id="dollOn" checked> ドール質感を使う</label>
-        <div class="row"><span>なめらかさ</span><input id="dollSmoothness" type="range" min="0" max="100" value="45"><output id="dollSmoothnessOut">45</output></div>
-        <div class="row"><span>エッジ保護</span><input id="dollEdgeProtect" type="range" min="0" max="100" value="70"><output id="dollEdgeProtectOut">70</output></div>
-        <div class="row"><span>輪郭のくっきり</span><input id="dollSharpness" type="range" min="0" max="100" value="50"><output id="dollSharpnessOut">50</output></div>
-        <p class="mini" style="margin-top:6px;">なめらかさを上げるほど陶器のような質感が強くなります。エッジ保護は平滑化から目・髪の境目・服の線を守り、「輪郭のくっきり」は平滑化後の強いエッジだけをアンシャープマスクで持ち上げます。滑らかさで変化した部分は自動的にシャープ量を抑え、髪のジャギを戻しにくくしています。</p>
+        <div class="row"><span>ドール強度</span><input id="dollIntensity" type="range" min="0" max="100" value="55"><output id="dollIntensityOut">55</output></div>
+        <div class="row"><span>光のふんわり</span><input id="bloomIntensity" type="range" min="0" max="100" value="35"><output id="bloomIntensityOut">35</output></div>
+        <p class="mini" style="margin-top:6px;">ドール強度を上げると肌・髪の面がなめらかになりつつコントラストが立ちます。光のふんわりは髪のハイライトやライトのにじみ量です。前のバイラテラル版より元画像の細部を残す方向に調整しています。</p>
       </div>
     </div>
 
@@ -322,7 +321,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
   const processingOverlay=$('processingOverlay'), overlayText=$('overlayText'), overlaySub=$('overlaySub');
   const stickySavebar=$('stickySavebar'), btnSaveSticky=$('btnSaveSticky'), btnShareSticky=$('btnShareSticky');
   const toastEl=$('toast'), toastText=$('toastText');
-  const sliderIds=['apertureF','blurStrength','focusDepth','depthOfField','edgeSoftness','bokehRadius','ringIntensity','highlightThreshold','bokehIntensity','bokehDensity','bokehFringe','dollSmoothness','dollEdgeProtect','dollSharpness','brushSize','filterStrength','bright','sat','contrast','warmth','glow','subjectPop','copyrightOffsetX','copyrightOffsetY','copyrightScale','copyrightOpacity'];
+  const sliderIds=['apertureF','blurStrength','focusDepth','depthOfField','edgeSoftness','bokehRadius','ringIntensity','highlightThreshold','bokehIntensity','bokehDensity','bokehFringe','dollIntensity','bloomIntensity','brushSize','filterStrength','bright','sat','contrast','warmth','glow','subjectPop','copyrightOffsetX','copyrightOffsetY','copyrightScale','copyrightOpacity'];
   sliderIds.forEach(id=>{const el=$(id), out=$(id+'Out'); out.textContent=el.value; el.addEventListener('input',()=>out.textContent=el.value);});
 
   let fullImg=null, fullW=0, fullH=0, workW=0, workH=0, srcCanvas=null;
@@ -370,8 +369,6 @@ button:disabled{opacity:.55;cursor:not-allowed}
   let imageRevision=0;
   let dollTextureCacheKey='';
   let dollTextureCacheCanvas=null;
-  let dollSubjectMaskCacheKey='';
-  let dollSubjectMaskCacheCanvas=null;
   let maskRevision=0;
   const effectiveMaskCache=new Map();
   const lensMaskCache=new Map();
@@ -613,7 +610,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
     depthMaskCacheValue=null;
     depthLayerCacheKey='';
     depthLayerCacheValue=null;
-  dollTextureCacheKey='';dollTextureCacheCanvas=null;dollSubjectMaskCacheKey='';dollSubjectMaskCacheCanvas=null;}
+  dollTextureCacheKey='';dollTextureCacheCanvas=null;}
 
   function getPreviewSize(){
     const maxSide=Math.max(workW,workH);
@@ -690,7 +687,6 @@ button:disabled{opacity:.55;cursor:not-allowed}
       addBlurMask=offscreen(workW,workH);
       restoreSharpMask=offscreen(workW,workH);
       dollTextureCacheKey='';dollTextureCacheCanvas=null;
-      dollSubjectMaskCacheKey='';dollSubjectMaskCacheCanvas=null;
       maskPaintCanvas.width=workW;maskPaintCanvas.height=workH;
       maskPaintCtx.clearRect(0,0,workW,workH);
       bumpMaskRevision();
@@ -1716,9 +1712,8 @@ void main(){
       bokehDensity:+$('bokehDensity').value/100,
       bokehFringe:+$('bokehFringe').value/100,
       edgeSoftness:+$('edgeSoftness').value/100,
-      dollSmoothness:+$('dollSmoothness').value/100,
-      dollEdgeProtect:+$('dollEdgeProtect').value/100,
-      dollSharpness:+$('dollSharpness').value/100,
+      dollIntensity:+$('dollIntensity').value/100,
+      bloomIntensity:+$('bloomIntensity').value/100,
       subjectPop:effective.subjectPop
     };
   }
@@ -1810,235 +1805,143 @@ void main(){
     return out;
   }
 
-  function buildDollSubjectMask(w,h){
-    if(!autoBackgroundMask) return null;
-    const key=`${imageRevision}:${maskRevision}:${w}x${h}`;
-    if(dollSubjectMaskCacheKey===key && dollSubjectMaskCacheCanvas) return dollSubjectMaskCacheCanvas;
-
-    const bg=offscreen(w,h), bctx=bg.getContext('2d');
-    bctx.imageSmoothingEnabled=true;
-    if('imageSmoothingQuality' in bctx) bctx.imageSmoothingQuality='high';
-    bctx.drawImage(autoBackgroundMask,0,0,workW,workH,0,0,w,h);
-
-    let refined=remapBackgroundMaskAlpha(bg,w,h,0.30,0.82);
-    refined=bilateralSmoothBackgroundMask(refined,aiDepthCanvas,w,h,0.42);
-    let subject=subjectMaskFromBackgroundMask(refined,w,h);
-    subject=softenMaskEdge(subject,w,h,0.65);
-
-    dollSubjectMaskCacheKey=key;
-    dollSubjectMaskCacheCanvas=subject;
-    return subject;
-  }
-
   function getDollTextureCacheKey(w,h,v,interactive){
     return [
-      imageRevision,maskRevision,w,h,interactive?1:0,currentPreset,
+      imageRevision,w,h,interactive?1:0,currentPreset,
       $('filterStrength').value,$('bright').value,$('sat').value,$('contrast').value,
-      $('warmth').value,$('glow').value,$('dollSmoothness').value,$('dollEdgeProtect').value,$('dollSharpness').value
+      $('warmth').value,$('glow').value,$('dollIntensity').value,$('bloomIntensity').value
     ].join(':');
   }
 
-  function applyBilateralSurfaceBlurToSubject(source,w,h,subjectMask,v,interactive=false){
-    if(!source||!subjectMask) return source;
+  // 高速ドールフィルター。
+  // ImageData / getImageData / putImageData を使わず、Canvas 2D の filter と
+  // globalCompositeOperation だけで表面の滑らかさ・解像感・Bloom を合成する。
+  // ブラウザ実装によってGPU利用の度合いは異なるが、ピクセル単位のJSループを避けるため
+  // 高解像度SSでも従来のバイラテラル処理より大幅に軽い構成。
+  function applyGpuDollFilter(canvas,image,dollIntensity=0.55,bloomIntensity=0.35){
+    if(!canvas||!image) return canvas;
 
-    const smooth=clamp01(v.dollSmoothness);
-    const protect=clamp01(v.dollEdgeProtect);
-    if(smooth<=0.001) return source;
+    const d=clamp01(+dollIntensity||0);
+    const b=clamp01(+bloomIntensity||0);
+    const w=canvas.width||image.width||image.naturalWidth||0;
+    const h=canvas.height||image.height||image.naturalHeight||0;
+    if(!w||!h) return canvas;
 
-    const radius=Math.max(1,Math.min(5,1+Math.round(smooth*4)));
-    const tolerance=Math.max(12,55-protect*43);
-    const toleranceSq=tolerance*tolerance;
-    const blendBase=0.24+smooth*0.68;
+    const cctx=canvas.getContext('2d',{alpha:true,desynchronized:true});
+    if(!cctx) return canvas;
 
-    const srcC=offscreen(w,h), sctx=srcC.getContext('2d',{willReadFrequently:true});
-    sctx.drawImage(source,0,0,w,h);
-    const srcImg=sctx.getImageData(0,0,w,h), src=srcImg.data;
+    const source=offscreen(w,h);
+    const sctx=source.getContext('2d',{alpha:true,desynchronized:true});
+    sctx.imageSmoothingEnabled=true;
+    if('imageSmoothingQuality' in sctx)sctx.imageSmoothingQuality='high';
+    sctx.clearRect(0,0,w,h);
+    sctx.drawImage(image,0,0,w,h);
 
-    const maskC=offscreen(w,h), mctx=maskC.getContext('2d',{willReadFrequently:true});
-    mctx.drawImage(subjectMask,0,0,w,h);
-    const maskData=mctx.getImageData(0,0,w,h).data;
+    cctx.save();
+    cctx.setTransform(1,0,0,1,0,0);
+    cctx.clearRect(0,0,w,h);
+    cctx.imageSmoothingEnabled=true;
+    if('imageSmoothingQuality' in cctx)cctx.imageSmoothingQuality='high';
 
-    const outC=offscreen(w,h), octx=outC.getContext('2d',{willReadFrequently:true});
-    const dstImg=octx.createImageData(w,h), dst=dstImg.data;
-    dst.set(src);
+    // Canvas filter 非対応環境では安全に原画を表示する。
+    if(!('filter' in cctx)){
+      cctx.drawImage(source,0,0,w,h);
+      cctx.restore();
+      return canvas;
+    }
 
-    let minX=w,minY=h,maxX=-1,maxY=-1;
-    for(let y=0;y<h;y++){
-      const row=y*w*4;
-      for(let x=0;x<w;x++){
-        if(maskData[row+x*4+3]>10){
-          if(x<minX)minX=x;if(x>maxX)maxX=x;if(y<minY)minY=y;if(y>maxY)maxY=y;
+    // Layer 1: ツルッとしたベース。
+    // ぼかしをかなり小さく抑え、前バージョンの「全体が眠る」感じを避ける。
+    const baseBlur=0.10+d*0.72;
+    const baseContrast=1.00+d*0.16;
+    const baseBrightness=1.00+d*0.025;
+    const baseSaturation=1.00+d*0.045;
+
+    cctx.globalCompositeOperation='source-over';
+    cctx.globalAlpha=1;
+    cctx.filter=`blur(${baseBlur.toFixed(2)}px) contrast(${baseContrast.toFixed(3)}) brightness(${baseBrightness.toFixed(3)}) saturate(${baseSaturation.toFixed(3)})`;
+    cctx.drawImage(source,0,0,w,h);
+
+    // Layer 1b: 原画ディテールを戻す。
+    // ピクセルシャープではなく原画そのものを重ねるため、髪のジャギを人工的に生成しにくい。
+    const detailAlpha=0.42+d*0.16;
+    cctx.globalCompositeOperation='source-over';
+    cctx.globalAlpha=detailAlpha;
+    cctx.filter=`contrast(${(1.00+d*0.10).toFixed(3)}) saturate(${(1.00+d*0.025).toFixed(3)})`;
+    cctx.drawImage(source,0,0,w,h);
+
+    // Layer 1c: soft-light をごく薄く重ねて輪郭と立体感を補う。
+    cctx.globalCompositeOperation='soft-light';
+    cctx.globalAlpha=0.025+d*0.10;
+    cctx.filter=`contrast(${(1.04+d*0.12).toFixed(3)})`;
+    cctx.drawImage(source,0,0,w,h);
+
+    // Layer 2: Bloom。
+    // 縮小Canvas上で blur してから拡大することで、高解像度でも軽くする。
+    if(b>0.001){
+      const drawBloomPass=(scale,blurPx,brightness,contrast,saturation,alpha)=>{
+        const bw=Math.max(1,Math.round(w*scale));
+        const bh=Math.max(1,Math.round(h*scale));
+        const bloom=offscreen(bw,bh);
+        const bctx=bloom.getContext('2d',{alpha:true,desynchronized:true});
+        bctx.imageSmoothingEnabled=true;
+        if('imageSmoothingQuality' in bctx)bctx.imageSmoothingQuality='high';
+        bctx.clearRect(0,0,bw,bh);
+        if('filter' in bctx){
+          const scaledBlur=Math.max(0.4,blurPx*scale);
+          bctx.filter=`blur(${scaledBlur.toFixed(2)}px) brightness(${brightness.toFixed(3)}) contrast(${contrast.toFixed(3)}) saturate(${saturation.toFixed(3)})`;
         }
-      }
-    }
-    if(maxX<minX||maxY<minY){octx.putImageData(dstImg,0,0);return outC;}
+        bctx.drawImage(source,0,0,w,h,0,0,bw,bh);
 
-    minX=Math.max(0,minX-radius);minY=Math.max(0,minY-radius);
-    maxX=Math.min(w-1,maxX+radius);maxY=Math.min(h-1,maxY+radius);
+        cctx.globalCompositeOperation='screen';
+        cctx.globalAlpha=alpha;
+        cctx.filter='none';
+        cctx.drawImage(bloom,0,0,bw,bh,0,0,w,h);
+      };
 
-    const offsets=[];
-    const sigma=Math.max(1,radius*0.78);
-    const invSpatial=1/(2*sigma*sigma);
-    for(let dy=-radius;dy<=radius;dy++){
-      for(let dx=-radius;dx<=radius;dx++){
-        const d2=dx*dx+dy*dy;
-        if(d2>radius*radius) continue;
-        offsets.push([dx,dy,Math.exp(-d2*invSpatial)]);
-      }
-    }
-
-    const edgeLow=0.035+(1-protect)*0.045;
-    const edgeHigh=0.11+(1-protect)*0.12;
-
-    for(let y=minY;y<=maxY;y++){
-      for(let x=minX;x<=maxX;x++){
-        const idx=(y*w+x)*4;
-        const ma=maskData[idx+3]/255;
-        if(ma<0.025) continue;
-
-        const cr=src[idx],cg=src[idx+1],cb=src[idx+2];
-        const xl=Math.max(0,x-1), xr=Math.min(w-1,x+1);
-        const yu=Math.max(0,y-1), yd=Math.min(h-1,y+1);
-        const il=(y*w+xl)*4, ir=(y*w+xr)*4, iu=(yu*w+x)*4, id=(yd*w+x)*4;
-        const edgeL1=(
-          Math.abs(src[ir]-src[il])+Math.abs(src[ir+1]-src[il+1])+Math.abs(src[ir+2]-src[il+2])+
-          Math.abs(src[id]-src[iu])+Math.abs(src[id+1]-src[iu+1])+Math.abs(src[id+2]-src[iu+2])
-        )/(255*6);
-        const edgeGate=1-smoothstep(edgeLow,edgeHigh,edgeL1);
-        const mixAmt=blendBase*ma*(0.18+0.82*edgeGate);
-        if(mixAmt<0.015) continue;
-
-        let sumR=0,sumG=0,sumB=0,sumW=0;
-        for(let k=0;k<offsets.length;k++){
-          const ox=offsets[k][0],oy=offsets[k][1];
-          const sx=x+ox,sy=y+oy;
-          if(sx<0||sx>=w||sy<0||sy>=h) continue;
-          const si=(sy*w+sx)*4;
-          const sma=maskData[si+3]/255;
-          if(sma<0.02) continue;
-
-          const dr=src[si]-cr,dg=src[si+1]-cg,db=src[si+2]-cb;
-          const colorDistSq=dr*dr+dg*dg+db*db;
-          if(colorDistSq>toleranceSq) continue;
-
-          let cw=1-colorDistSq/toleranceSq;
-          cw*=cw;
-          const weight=offsets[k][2]*cw*(0.22+0.78*sma);
-          sumR+=src[si]*weight;
-          sumG+=src[si+1]*weight;
-          sumB+=src[si+2]*weight;
-          sumW+=weight;
-        }
-
-        if(sumW>0.00001){
-          const br=sumR/sumW,bg=sumG/sumW,bb=sumB/sumW;
-          dst[idx]=Math.round(cr+(br-cr)*mixAmt);
-          dst[idx+1]=Math.round(cg+(bg-cg)*mixAmt);
-          dst[idx+2]=Math.round(cb+(bb-cb)*mixAmt);
-          dst[idx+3]=src[idx+3];
-        }
-      }
+      // タイトな光 + 広い光の2段。
+      drawBloomPass(
+        0.50,
+        5+b*11,
+        1.02+b*0.16,
+        1.03+b*0.18,
+        1.00+b*0.055,
+        0.025+b*0.16
+      );
+      drawBloomPass(
+        0.25,
+        11+b*17,
+        1.03+b*0.20,
+        1.04+b*0.20,
+        1.00+b*0.07,
+        0.010+b*0.075
+      );
     }
 
-    octx.putImageData(dstImg,0,0);
-    return outC;
-  }
+    // 最後に原画をほんの少し戻し、微細な目・髪・衣装の情報を保持。
+    cctx.globalCompositeOperation='source-over';
+    cctx.globalAlpha=0.055+d*0.035;
+    cctx.filter='none';
+    cctx.drawImage(source,0,0,w,h);
 
-  function applyDollEdgeAwareUnsharp(originalSource,smoothedSource,w,h,subjectMask,v){
-    if(!originalSource||!smoothedSource||!subjectMask) return smoothedSource;
-    const amount=clamp01(v.dollSharpness);
-    if(amount<=0.001) return smoothedSource;
-
-    const origC=offscreen(w,h), oig=origC.getContext('2d',{willReadFrequently:true});
-    oig.drawImage(originalSource,0,0,w,h);
-    const orig=oig.getImageData(0,0,w,h).data;
-
-    const srcC=offscreen(w,h), sctx=srcC.getContext('2d',{willReadFrequently:true});
-    sctx.drawImage(smoothedSource,0,0,w,h);
-    const srcImg=sctx.getImageData(0,0,w,h), src=srcImg.data;
-
-    const maskC=offscreen(w,h), mctx=maskC.getContext('2d',{willReadFrequently:true});
-    mctx.drawImage(subjectMask,0,0,w,h);
-    const maskData=mctx.getImageData(0,0,w,h).data;
-
-    const outC=offscreen(w,h), outCtx=outC.getContext('2d',{willReadFrequently:true});
-    const dstImg=outCtx.createImageData(w,h), dst=dstImg.data;
-    dst.set(src);
-
-    const lumAt=(data,idx)=>0.2126*data[idx]+0.7152*data[idx+1]+0.0722*data[idx+2];
-    const detailLimit=10+amount*6;
-
-    for(let y=1;y<h-1;y++){
-      for(let x=1;x<w-1;x++){
-        const idx=(y*w+x)*4;
-        const ma=maskData[idx+3]/255;
-        if(ma<0.04) continue;
-
-        const il=(y*w+(x-1))*4, ir=(y*w+(x+1))*4;
-        const iu=((y-1)*w+x)*4, id=((y+1)*w+x)*4;
-        const iul=((y-1)*w+(x-1))*4, iur=((y-1)*w+(x+1))*4;
-        const idl=((y+1)*w+(x-1))*4, idr=((y+1)*w+(x+1))*4;
-
-        const lc=lumAt(src,idx);
-        const ll=lumAt(src,il), lr=lumAt(src,ir);
-        const lu=lumAt(src,iu), ld=lumAt(src,id);
-        const lul=lumAt(src,iul), lur=lumAt(src,iur);
-        const ldl=lumAt(src,idl), ldr=lumAt(src,idr);
-
-        // 強い輪郭だけを拾う。sqrtを使わないL1勾配でスマホ負荷を抑える。
-        const grad=(Math.abs(lr-ll)+Math.abs(ld-lu))/(255*2);
-        const edgeMask=smoothstep(0.055,0.19,grad);
-        if(edgeMask<=0.002) continue;
-
-        // 3x3の軽量ガウス近似。中心4、上下左右1、斜め0.5。
-        const blurLum=(lc*4 + ll+lr+lu+ld + (lul+lur+ldl+ldr)*0.5)/10;
-        let detail=lc-blurLum;
-        if(detail>detailLimit) detail=detailLimit;
-        else if(detail<-detailLimit) detail=-detailLimit;
-
-        // バイラテラルで大きく変えた場所は、ジャギや表面ノイズを戻さないためシャープを抑える。
-        const smoothDelta=(
-          Math.abs(orig[idx]-src[idx])+
-          Math.abs(orig[idx+1]-src[idx+1])+
-          Math.abs(orig[idx+2]-src[idx+2])
-        )/(255*3);
-        const retainGate=1-smoothstep(0.018,0.095,smoothDelta);
-
-        const gain=amount*1.35*edgeMask*retainGate*ma;
-        if(gain<=0.002) continue;
-
-        dst[idx]=clamp255(src[idx]+detail*gain);
-        dst[idx+1]=clamp255(src[idx+1]+detail*gain);
-        dst[idx+2]=clamp255(src[idx+2]+detail*gain);
-        dst[idx+3]=src[idx+3];
-      }
-    }
-
-    outCtx.putImageData(dstImg,0,0);
-    return outC;
+    cctx.globalAlpha=1;
+    cctx.globalCompositeOperation='source-over';
+    cctx.filter='none';
+    cctx.restore();
+    return canvas;
   }
 
   function applyDollTexture(source,w,h,v,interactive=false){
-    if(!$('dollOn').checked || !autoBackgroundMask || v.dollSmoothness<=0.001) return source;
-    const subjectMask=buildDollSubjectMask(w,h);
-    if(!subjectMask) return source;
+    if(!$('dollOn').checked) return source;
+    const d=clamp01(v.dollIntensity);
+    const b=clamp01(v.bloomIntensity);
+    if(d<=0.001&&b<=0.001) return source;
 
     const key=getDollTextureCacheKey(w,h,v,interactive);
-    if(dollTextureCacheKey===key && dollTextureCacheCanvas) return dollTextureCacheCanvas;
+    if(dollTextureCacheKey===key&&dollTextureCacheCanvas) return dollTextureCacheCanvas;
 
-    const smoothed=applyBilateralSurfaceBlurToSubject(source,w,h,subjectMask,v,interactive);
-    const processed=applyDollEdgeAwareUnsharp(source,smoothed,w,h,subjectMask,v);
-    const out=offscreen(w,h), octx=out.getContext('2d');
-    octx.imageSmoothingEnabled=true;
-    if('imageSmoothingQuality' in octx) octx.imageSmoothingQuality='high';
-    octx.drawImage(source,0,0,w,h);
-
-    const layer=offscreen(w,h), lctx=layer.getContext('2d');
-    lctx.drawImage(processed,0,0,w,h);
-    lctx.globalCompositeOperation='destination-in';
-    lctx.drawImage(subjectMask,0,0,w,h);
-    lctx.globalCompositeOperation='source-over';
-    octx.drawImage(layer,0,0,w,h);
+    const out=offscreen(w,h);
+    applyGpuDollFilter(out,source,d,b);
 
     dollTextureCacheKey=key;
     dollTextureCacheCanvas=out;
@@ -2202,7 +2105,6 @@ void main(){
       pickerCard.style.display='none';canvasWrap.style.display='block';panel.style.display='block';viewerTools.style.display='block';stickySavebar.style.display='block';
       imageRevision++;
       dollTextureCacheKey='';dollTextureCacheCanvas=null;
-      dollSubjectMaskCacheKey='';dollSubjectMaskCacheCanvas=null;
       autoBackgroundMask=null;segError=null;updateSegUI();
       applyPreset(currentPreset);
       computeAutoBackgroundMask();
